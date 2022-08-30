@@ -27,11 +27,11 @@ import (
 
 const (
 	dutDesc    = "To ATE"
-	dutIPv4    = "10.244.0.70"
+	dutIPv4    = "10.244.0.11"
 	dutIPv4Len = 30
 
 	ateDesc    = "To DUT"
-	ateIPv4    = "10.244.0.71"
+	ateIPv4    = "10.244.0.10"
 	ateIPv4Len = 30
 
 	dutAS = 64500
@@ -49,8 +49,8 @@ func bgpWithNbr(as uint32, routerID string, nbr *telemetry.NetworkInstance_Proto
 }
 
 func TestEstablish(t *testing.T) {
-	dut := ondatra.DUT(t, "fakedut")
-	ate := ondatra.DUT(t, "fakedut2")
+	dut := ondatra.DUT(t, "dut")
+	ate := ondatra.DUT(t, "dut2")
 
 	dutConfPath := dut.Config().NetworkInstance("default").Protocol(telemetry.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP, "BGP").Bgp()
 	ateConfPath := ate.Config().NetworkInstance("default").Protocol(telemetry.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP, "BGP").Bgp()
@@ -62,14 +62,27 @@ func TestEstablish(t *testing.T) {
 	nbrPath := statePath.Neighbor(ateIPv4)
 	// Start a new session
 	dutConf := bgpWithNbr(dutAS, dutIPv4, &telemetry.NetworkInstance_Protocol_Bgp_Neighbor{
-		PeerAs:          ygot.Uint32(dutAS),
+		PeerAs:          ygot.Uint32(ateAS),
 		NeighborAddress: ygot.String(ateIPv4),
 	})
-	ateConf := bgpWithNbr(dutAS, ateIPv4, &telemetry.NetworkInstance_Protocol_Bgp_Neighbor{
+	ateConf := bgpWithNbr(ateAS, ateIPv4, &telemetry.NetworkInstance_Protocol_Bgp_Neighbor{
 		PeerAs:          ygot.Uint32(dutAS),
 		NeighborAddress: ygot.String(dutIPv4),
 	})
 	dutConfPath.Replace(t, dutConf)
 	ateConfPath.Replace(t, ateConf)
-	nbrPath.SessionState().Await(t, time.Second*15, telemetry.Bgp_Neighbor_SessionState_ESTABLISHED)
+
+	ate.Config().System().Hostname().Replace(t, "hello1")
+	dut.Config().System().Hostname().Replace(t, "hello0")
+
+	//fmt.Printf("printing conf: %+v\n", *dutConfPath.Get(t).Neighbor["10.244.0.16"].PeerAs)
+	//fmt.Printf("printing state: %+v\n", *statePath.Get(t).Neighbor["10.244.0.16"].PeerAs)
+	//path, _, err := ygot.ResolvePath(nbrPath.NodePath)
+	//if err != nil {
+	//	panic(err)
+	//}
+	//fmt.Println(path.String())
+	//fmt.Printf("printing state: %+v\n", nbrPath.SessionState().Get(t))
+	// TODO(wenbli): This is not working, need to debug the reason.
+	nbrPath.SessionState().Await(t, time.Second*5, telemetry.Bgp_Neighbor_SessionState_ESTABLISHED)
 }

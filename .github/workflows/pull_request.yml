@@ -1,6 +1,52 @@
 name: Pull Request
 on: [pull_request]
 jobs:
+  validate_protobufs:
+    name: Validate Protobufs
+    runs-on: ubuntu-latest
+    steps:
+    - name: Install go
+      uses: actions/setup-go@v2
+      with:
+        go-version: '1.19'
+    - name: Checkout code
+      uses: actions/checkout@v2
+    - name: Cache
+      uses: actions/cache@v2
+      with:
+        path: |
+          ~/go/pkg/mod
+          ~/.cache/go-build
+        key: ${{ github.job }}-${{ runner.os }}-go-build-${{ hashFiles('**/go.sum') }}
+        restore-keys: ${{ github.job }}-${{ runner.os }}-go-build-
+    - name: Install protobuf
+      uses: arduino/setup-protoc@v1
+      with:
+        version: '3.x'
+    - name: Lint protobufs
+      run: |
+        go install github.com/googleapis/api-linter/cmd/api-linter@latest
+        find . -name \*.proto -exec api-linter --disable-rule all --enable-rule core {} \+
+    - name: Compile topology binding textprotos
+      run: |
+        fail=0
+        for i in `find topologies/ -type f -name "*.binding"`; do
+          if ! output=$(protoc --encode=openconfig.testing.Binding topologies/proto/binding.proto < $i 2>&1 >/dev/null); then
+            fail=1
+            echo -e "Compile $i failed:\n$output\n"
+          fi
+        done
+        if [ "$fail" == "1" ]; then exit 1; fi
+    - name: Compile feature profile textprotos
+      run: |
+        fail=0
+        for i in `find feature/ -type f -name "*.textproto"`; do
+          if ! output=$(protoc --encode=openconfig.profiles.FeatureProfile proto/feature.proto < $i 2>&1 >/dev/null); then
+            fail=1
+            echo -e "Compile $i failed:\n$output\n"
+          fi
+        done
+        if [ "$fail" == "1" ]; then exit 1; fi
   validate_oc_paths:
     name: Validate OpenConfig Paths
     runs-on: ubuntu-latest
@@ -8,7 +54,7 @@ jobs:
     - name: Install go
       uses: actions/setup-go@v2
       with:
-        go-version: '1.17'
+        go-version: '1.19'
     - name: Checkout code
       uses: actions/checkout@v2
     - name: Cache
@@ -17,11 +63,57 @@ jobs:
         path: |
           ~/go/pkg/mod
           ~/.cache/go-build
-        key: ${{ runner.os }}-go-build-${{ hashFiles('**/go.sum') }}
+        key: ${{ github.job }}-${{ runner.os }}-go-build-${{ hashFiles('**/go.sum') }}
+        restore-keys: ${{ github.job }}-${{ runner.os }}-go-build-
     - name: Fetch Openconfig Models
       run: make openconfig_public
     - name: Validate Paths
       run: make validate_paths
+  check_style:
+    name: Check style against CONTRIBUTING.md
+    runs-on: ubuntu-latest
+    steps:
+    - name: Setup Perl
+      uses: perl-actions/install-with-cpanm@v1
+      with:
+        install: |
+          Net::IP
+    - name: Checkout code
+      uses: actions/checkout@v2
+    - name: IP Addresses Assignment
+      run: |
+        find . -path ./yang/fpoc -prune -o -name \*.go \
+          -exec ./tools/check_ip_addresses.pl \{} +
+    - name: Allowed File Types
+      run: ./tools/allowed_file_types.sh
+    - name: Enum
+      run: |
+        fail=0
+
+        if find . -name \*.go -exec egrep -n '\.Union.*?\([0-9]+\)' \{} +
+        then
+          echo "Please do not use numerical constants in a union." >&2
+          echo "See CONTRIBUTING.md#enum" >&2
+          fail=1
+        fi
+
+        if find . -name \*.go -exec egrep -n '_Union\([0-9]+\)' \{} +
+        then
+          echo "Please do not use numerical constants in a union." >&2
+          echo "See CONTRIBUTING.md#enum" >&2
+          fail=1
+        fi
+
+        exit "${fail}"
+    - name: Default NetworkInstance
+      run: |
+        if find . -path ./yang/fpoc -prune -o \
+          -name \*.go -exec egrep -n '"default"' \{} +
+        then
+          echo "Default network instance name should be uppercase." >&2
+          echo "See CONTRIBUTING.md#default-network-instance" >&2
+          exit 1
+        fi
   static_analysis:
     name: Static Analysis
     runs-on: ubuntu-latest
@@ -29,7 +121,7 @@ jobs:
     - name: Install go
       uses: actions/setup-go@v2
       with:
-        go-version: '1.17'
+        go-version: '1.19'
     - name: Checkout code
       uses: actions/checkout@v2
     - name: Cache
@@ -38,17 +130,37 @@ jobs:
         path: |
           ~/go/pkg/mod
           ~/.cache/go-build
-        key: ${{ runner.os }}-go-build-${{ hashFiles('**/go.sum') }}
+          ~/.cache/staticcheck
+        key: ${{ github.job }}-${{ runner.os }}-go-build-${{ hashFiles('**/go.sum') }}
+        restore-keys: ${{ github.job }}-${{ runner.os }}-go-build-
     - name: Go vet
       run: go vet ./...
     - name: Gofmt
-      run: diff -u <(echo -n) <(gofmt -d -s .)
+      run: |
+        # gofmt always returns true, so we use grep '^' which returns
+        # true on non-empty output, but will otherwise passthrough all
+        # output lines.
+        if gofmt -d -s . | grep '^'; then
+          exit 1
+        fi
+    - name: Get goimports
+      run: go install golang.org/x/tools/cmd/goimports@latest
+    - name: Goimports
+      run: |
+        # goimports always returns true, so we use grep '^' which returns
+        # true on non-empty output, but will otherwise passthrough all
+        # output lines.
+        #
+        # goimports does not support "gofmt -s" so both goimports and gofmt are
+        # required.
+        if goimports -d . | grep '^'; then
+          exit 1
+        fi
+    - name: Get revive
+      run: go install github.com/mgechev/revive@latest
+    - name: Run revive
+      run: revive -exclude yang/fpoc ./...
     - name: Get staticcheck
       run: go install honnef.co/go/tools/cmd/staticcheck@latest
     - name: Run staticcheck
-      run: |
-        checkstr=""
-        for i in `go list ./... | grep -v github.com/openconfig/featureprofiles/yang`; do
-          checkstr="$checkstr $i"
-        done
-        staticcheck $checkstr
+      run: GOGC=30 staticcheck ./...

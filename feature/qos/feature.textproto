@@ -1,0 +1,143 @@
+id {
+  name: "qos"
+  version: 1
+}
+
+# Classifiers
+config_path {
+  path: "/qos/classifiers/classifier/config/name"
+}
+telemetry_path {
+  path: "/qos/classifiers/classifier/state/name"
+}
+config_path {
+  path: "/qos/classifiers/classifier/config/type"
+}
+telemetry_path {
+  path: "/qos/classifiers/classifier/state/type"
+}
+config_path {
+  path: "/qos/classifiers/classifier/terms/term/actions/config/target-group"
+}
+telemetry_path {
+  path: "/qos/classifiers/classifier/terms/term/actions/state/target-group"
+}
+config_path {
+  path: "/qos/classifiers/classifier/terms/term/conditions/ipv4/config/dscp"
+}
+telemetry_path {
+  path: "/qos/classifiers/classifier/terms/term/conditions/ipv4/state/dscp"
+}
+config_path {
+  path: "/qos/classifiers/classifier/terms/term/conditions/ipv6/config/dscp"
+}
+telemetry_path {
+  path: "/qos/classifiers/classifier/terms/term/conditions/ipv6/state/dscp"
+}
+config_path {
+  path: "/qos/classifiers/classifier/terms/term/config/id"
+}
+telemetry_path {
+  path: "/qos/classifiers/classifier/terms/term/state/id"
+}
+
+# Forwarding Groups
+config_path {
+  path: "/qos/forwarding-groups/forwarding-group/config/fabric-priority"
+}
+telemetry_path {
+  path: "/qos/forwarding-groups/forwarding-group/state/fabric-priority"
+}
+config_path {
+  path: "/qos/forwarding-groups/forwarding-group/config/name"
+}
+telemetry_path {
+  path: "/qos/forwarding-groups/forwarding-group/state/name"
+}
+config_path {
+  path: "/qos/forwarding-groups/forwarding-group/config/output-queue"
+}
+telemetry_path {
+  path: "/qos/forwarding-groups/forwarding-group/state/output-queue"
+}
+
+# Interfaces
+telemetry_path {
+  path: "/qos/interfaces/interface/input/classifiers/classifier/state/name"
+}
+config_path {
+  path: "/qos/interfaces/interface/output/queues/queue/config/name"
+}
+config_path {
+  path: "/qos/interfaces/interface/output/scheduler-policy/config/name"
+}
+telemetry_path {
+  path: "/qos/interfaces/interface/output/scheduler-policy/state/name"
+}
+
+# Queues
+telemetry_path {
+  path: "/qos/queues/queue/state/name"
+}
+
+# Scheduler policy
+config_path {
+  path: "/qos/scheduler-policies/scheduler-policy/config/name"
+}
+telemetry_path {
+  path: "/qos/scheduler-policies/scheduler-policy/state/name"
+}
+config_path {
+  path: "/qos/scheduler-policies/scheduler-policy/schedulers/scheduler/config/priority"
+}
+telemetry_path {
+  path: "/qos/scheduler-policies/scheduler-policy/schedulers/scheduler/state/priority"
+}
+config_path {
+  path: "/qos/scheduler-policies/scheduler-policy/schedulers/scheduler/config/sequence"
+}
+telemetry_path {
+  path: "/qos/scheduler-policies/scheduler-policy/schedulers/scheduler/state/sequence"
+}
+config_path {
+  path: "/qos/scheduler-policies/scheduler-policy/schedulers/scheduler/config/type"
+}
+telemetry_path {
+  path: "/qos/scheduler-policies/scheduler-policy/schedulers/scheduler/state/type"
+}
+config_path {
+  path: "/qos/scheduler-policies/scheduler-policy/schedulers/scheduler/inputs/input/config/id"
+}
+telemetry_path {
+  path: "/qos/scheduler-policies/scheduler-policy/schedulers/scheduler/inputs/input/state/id"
+}
+config_path {
+  path: "/qos/scheduler-policies/scheduler-policy/schedulers/scheduler/inputs/input/config/input-type"
+}
+telemetry_path {
+  path: "/qos/scheduler-policies/scheduler-policy/schedulers/scheduler/inputs/input/state/input-type"
+}
+config_path {
+  path: "/qos/scheduler-policies/scheduler-policy/schedulers/scheduler/inputs/input/config/queue"
+}
+telemetry_path {
+  path: "/qos/scheduler-policies/scheduler-policy/schedulers/scheduler/inputs/input/state/queue"
+}
+config_path {
+  path: "/qos/scheduler-policies/scheduler-policy/schedulers/scheduler/inputs/input/config/weight"
+}
+telemetry_path {
+  path: "/qos/scheduler-policies/scheduler-policy/schedulers/scheduler/inputs/input/state/weight"
+}
+config_path {
+  path: "/qos/scheduler-policies/scheduler-policy/schedulers/scheduler/two-rate-three-color/config/cir"
+}
+telemetry_path {
+  path: "/qos/scheduler-policies/scheduler-policy/schedulers/scheduler/two-rate-three-color/state/cir"
+}
+config_path {
+  path: "/qos/scheduler-policies/scheduler-policy/schedulers/scheduler/two-rate-three-color/config/pir"
+}
+telemetry_path {
+  path: "/qos/scheduler-policies/scheduler-policy/schedulers/scheduler/two-rate-three-color/state/pir"
+}
