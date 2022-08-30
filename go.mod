@@ -58,3 +58,7 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	lukechampine.com/uint128 v1.1.1 // indirect
 )
+
+replace github.com/openconfig/kne => /usr/local/google/home/wenbli/gocode/src/github.com/wenovus/kne
+
+replace github.com/openconfig/ondatra => /usr/local/google/home/wenbli/gocode/src/github.com/wenovus/ondatra
