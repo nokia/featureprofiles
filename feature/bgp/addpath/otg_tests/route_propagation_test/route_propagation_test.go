@@ -561,12 +561,6 @@ func TestBGP(t *testing.T) {
 			t.Log("Configure Network Instance")
 			dutConfNIPath := gnmi.OC().NetworkInstance(*deviations.DefaultNetworkInstance)
 			gnmi.Replace(t, dut, dutConfNIPath.Type().Config(), oc.NetworkInstanceTypes_NETWORK_INSTANCE_TYPE_DEFAULT_INSTANCE)
-			if *deviations.ExplicitInterfaceInDefaultVRF {
-				for _, a := range []attrs.Attributes{dutPort1, dutPort2} {
-					ocName := dut.Port(t, a.Name).Name()
-					fptest.AssignToNetworkInstance(t, dut, ocName, *deviations.DefaultNetworkInstance, 0)
-				}
-			}
 
 			tc.dut.Configure(t, dut)
 
