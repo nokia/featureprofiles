@@ -232,7 +232,7 @@ func TestIPv4Entry(t *testing.T) {
 					AsResult(),
 				fluent.OperationResult().
 					WithIPv4Operation(dstPfx).
-					WithProgrammingResult(fluent.InstalledInFIB).
+					WithProgrammingResult(fluent.InstalledInRIB).
 					WithOperationType(constants.Add).
 					AsResult(),
 			},
