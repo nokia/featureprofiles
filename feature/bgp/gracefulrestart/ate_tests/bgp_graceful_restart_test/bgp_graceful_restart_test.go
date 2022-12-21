@@ -150,11 +150,21 @@ func buildNbrList(asN uint32) []*bgpNeighbor {
 	return []*bgpNeighbor{nbr1v4, nbr2v4, nbr1v6, nbr2v6}
 }
 
-func bgpWithNbr(as uint32, nbrs []*bgpNeighbor) *oc.NetworkInstance_Protocol_Bgp {
-	bgp := &oc.NetworkInstance_Protocol_Bgp{}
+func configureRoutingPolicy(d *oc.Root) *oc.RoutingPolicy {
+	rp := d.GetOrCreateRoutingPolicy()
+	pdef := rp.GetOrCreatePolicyDefinition("PERMIT-ALL")
+	pdef.GetOrCreateStatement("20").GetOrCreateActions().PolicyResult = oc.RoutingPolicy_PolicyResultType_ACCEPT_ROUTE
+	return rp
+}
+
+func bgpWithNbr(as uint32, nbrs []*bgpNeighbor) *oc.NetworkInstance_Protocol {
+	ni1 := &oc.NetworkInstance{Name: deviations.DefaultNetworkInstance}
+	ni_proto := ni1.GetOrCreateProtocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP, "BGP")
+	bgp := ni_proto.GetOrCreateBgp()
 	g := bgp.GetOrCreateGlobal()
 	g.As = ygot.Uint32(as)
 	g.RouterId = ygot.String(dutDst.IPv4)
+	g.GetOrCreateAfiSafi(oc.BgpTypes_AFI_SAFI_TYPE_IPV4_UNICAST).Enabled = ygot.Bool(true)
 	bgpgr := g.GetOrCreateGracefulRestart()
 	bgpgr.Enabled = ygot.Bool(true)
 	bgpgr.RestartTime = ygot.Uint16(grRestartTime)
@@ -163,6 +173,9 @@ func bgpWithNbr(as uint32, nbrs []*bgpNeighbor) *oc.NetworkInstance_Protocol_Bgp
 	pg := bgp.GetOrCreatePeerGroup(peerGrpName)
 	pg.PeerAs = ygot.Uint32(ateAS)
 	pg.PeerGroupName = ygot.String(peerGrpName)
+
+	pg.GetOrCreateApplyPolicy().ImportPolicy = []string{"PERMIT-ALL"}
+	pg.GetOrCreateApplyPolicy().ExportPolicy = []string{"PERMIT-ALL"}
 
 	for _, nbr := range nbrs {
 		if nbr.isV4 {
@@ -180,7 +193,7 @@ func bgpWithNbr(as uint32, nbrs []*bgpNeighbor) *oc.NetworkInstance_Protocol_Bgp
 			nv6.GetOrCreateAfiSafi(oc.BgpTypes_AFI_SAFI_TYPE_IPV6_UNICAST).Enabled = ygot.Bool(true)
 		}
 	}
-	return bgp
+	return ni_proto
 }
 
 func checkBgpStatus(t *testing.T, dut *ondatra.DUTDevice) {
@@ -395,10 +408,12 @@ func TestTrafficWithGracefulRestartSpeaker(t *testing.T) {
 	// Configure BGP+Neighbors on the DUT
 	t.Run("configureBGP", func(t *testing.T) {
 		t.Log("Configure BGP with Graceful Restart option under Global Bgp")
-		dutConfPath := gnmi.OC().NetworkInstance(*deviations.DefaultNetworkInstance).Protocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP, "BGP").Bgp()
+		dutConfPath := gnmi.OC().NetworkInstance(*deviations.DefaultNetworkInstance).Protocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP, "BGP")
 		gnmi.Delete(t, dut, dutConfPath.Config())
 		nbrList := buildNbrList(ateAS)
 		dutConf := bgpWithNbr(dutAS, nbrList)
+		rpl := configureRoutingPolicy(&oc.Root{})
+		gnmi.Replace(t, dut, gnmi.OC().RoutingPolicy().Config(), rpl)
 		gnmi.Replace(t, dut, dutConfPath.Config(), dutConf)
 		fptest.LogQuery(t, "DUT BGP Config", dutConfPath.Config(), gnmi.GetConfig(t, dut, dutConfPath.Config()))
 	})

@@ -56,6 +56,7 @@ const (
 
 var (
 	dutIPs = attrs.Attributes{
+		Desc:    "DUT ip",
 		Name:    "dutip",
 		IPv4:    "192.0.2.5",
 		IPv6:    "2001:db8::5",
