@@ -162,6 +162,7 @@ func TestInterfaceStatusChange(t *testing.T) {
 		intUpdateTime := 2 * time.Minute
 		t.Run(tc.desc, func(t *testing.T) {
 			i.Enabled = ygot.Bool(tc.IntfStatus)
+			i.Type = oc.IETFInterfaces_InterfaceType_ethernetCsmacd
 			gnmi.Replace(t, dut, gnmi.OC().Interface(dp.Name()).Config(), i)
 
 			gnmi.Await(t, dut, gnmi.OC().Interface(dp.Name()).OperStatus().State(), intUpdateTime, tc.expectedOperStatus)
@@ -622,6 +623,7 @@ func TestP4rtInterfaceID(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.desc, func(t *testing.T) {
 			i.Id = ygot.Uint32(tc.portID)
+			i.Type = oc.IETFInterfaces_InterfaceType_ethernetCsmacd
 			gnmi.Replace(t, dut, gnmi.OC().Interface(dp.Name()).Config(), i)
 
 			// Check path /interfaces/interface/state/id.
