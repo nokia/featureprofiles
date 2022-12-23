@@ -193,6 +193,11 @@ func configureDUT(t *testing.T, dut *ondatra.DUTDevice) {
 			t.Fatalf("No address found for port %v", dp)
 		}
 	}
+	if *deviations.ExplicitPortSpeed {
+		for _, dp := range dut.Ports() {
+			fptest.SetPortSpeed(t, dp)
+		}
+	}
 	if *deviations.ExplicitInterfaceInDefaultVRF {
 		for _, dp := range dut.Ports() {
 			fptest.AssignToNetworkInstance(t, dut, dp.Name(), *deviations.DefaultNetworkInstance, 0)

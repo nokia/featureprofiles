@@ -216,6 +216,10 @@ func (s *TestSession) PushAndStart(t *testing.T) error {
 	if err := s.PushDUT(context.Background()); err != nil {
 		return err
 	}
+	if *deviations.ExplicitPortSpeed {
+		fptest.SetPortSpeed(t, s.DUTPort1)
+		fptest.SetPortSpeed(t, s.DUTPort2)
+	}
 	if *deviations.ExplicitInterfaceInDefaultVRF {
 		fptest.AssignToNetworkInstance(t, s.DUT, s.DUTPort1.Name(), *deviations.DefaultNetworkInstance, 0)
 		fptest.AssignToNetworkInstance(t, s.DUT, s.DUTPort2.Name(), *deviations.DefaultNetworkInstance, 0)
