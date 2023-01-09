@@ -165,7 +165,6 @@ func verifyBgpTelemetry(t *testing.T, dut *ondatra.DUTDevice) {
 	t.Log("Verifying BGP state")
 	statePath := gnmi.OC().NetworkInstance(*deviations.DefaultNetworkInstance).Protocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP, "BGP").Bgp()
 	nbrPath := statePath.Neighbor(ateAttrs.IPv4)
-	nbr := gnmi.Get(t, dut, statePath.State()).GetNeighbor(ateAttrs.IPv4)
 
 	// Get BGP adjacency state
 	t.Log("Waiting for BGP neighbor to establish...")
@@ -191,6 +190,7 @@ func verifyBgpTelemetry(t *testing.T, dut *ondatra.DUTDevice) {
 	}
 
 	// Check BGP Transitions
+	nbr := gnmi.Get(t, dut, statePath.State()).GetNeighbor(ateAttrs.IPv4)
 	estTrans := nbr.GetEstablishedTransitions()
 	t.Logf("Got established transitions: %d", estTrans)
 	if estTrans != 1 {
