@@ -297,7 +297,6 @@ func createVrf(t *testing.T, dut *ondatra.DUTDevice, d *oc.Root, vrfs []string) 
 		if vrf != *deviations.DefaultNetworkInstance {
 			i := d.GetOrCreateNetworkInstance(vrf)
 			i.Type = oc.NetworkInstanceTypes_NETWORK_INSTANCE_TYPE_L3VRF
-			i.GetOrCreateProtocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_STATIC, *deviations.StaticProtocolName)
 			gnmi.Replace(t, dut, gnmi.OC().NetworkInstance(vrf).Config(), i)
 			nip := gnmi.OC().NetworkInstance(vrf)
 			fptest.LogQuery(t, "nonDefaultNI", nip.Config(), gnmi.GetConfig(t, dut, nip.Config()))
@@ -315,9 +314,6 @@ func pushConfig(t *testing.T, dut *ondatra.DUTDevice, dutPort *ondatra.Port, d *
 	gnmi.Replace(t, dut, gnmi.OC().Interface(iname).Config(), i)
 	if *deviations.ExplicitPortSpeed {
 		fptest.SetPortSpeed(t, dutPort)
-	}
-	if *deviations.ExplicitInterfaceInDefaultVRF {
-		fptest.AssignToNetworkInstance(t, dut, i.GetName(), *deviations.DefaultNetworkInstance, 0)
 	}
 }
 
@@ -341,7 +337,7 @@ func generateSubIntfPair(t *testing.T, dut *ondatra.DUTDevice, dutPort *ondatra.
 	nextHops := []string{}
 	nextHopCount := 63 // nextHopCount specifies number of nextHop IPs needed.
 	for i := 0; i <= nextHopCount; i++ {
-		vlanID := uint16(i)
+		vlanID := uint16(i + 1)
 		name := fmt.Sprintf(`dst%d`, i)
 		Index := uint32(i)
 		ateIPv4 := fmt.Sprintf(`198.51.100.%d`, ((4 * i) + 1))
@@ -352,6 +348,7 @@ func generateSubIntfPair(t *testing.T, dut *ondatra.DUTDevice, dutPort *ondatra.
 	}
 	configureInterfaceDUT(t, dutPort, d, "dst")
 	pushConfig(t, dut, dutPort, d)
+	gnmi.Replace(t, dut, gnmi.OC().NetworkInstance(*deviations.DefaultNetworkInstance).Config(), d.GetOrCreateNetworkInstance(*deviations.DefaultNetworkInstance))
 	return nextHops
 }
 
@@ -359,10 +356,11 @@ func generateSubIntfPair(t *testing.T, dut *ondatra.DUTDevice, dutPort *ondatra.
 func configureSubinterfaceDUT(t *testing.T, d *oc.Root, dutPort *ondatra.Port, index uint32, vlanID uint16, dutIPv4 string, vrf string) {
 	t.Helper()
 	if vrf != "" {
-		t.Logf("Put port %s into vrf %s", dutPort.Name(), vrf)
-		d.GetOrCreateNetworkInstance(vrf).GetOrCreateInterface(dutPort.Name())
+		t.Logf("Put port %s.%v into vrf %s", dutPort.Name(), index, vrf)
+		netInstIntf := d.GetOrCreateNetworkInstance(vrf).GetOrCreateInterface(dutPort.Name() + "." + fmt.Sprint(index))
+		netInstIntf.Interface = ygot.String(dutPort.Name())
+		netInstIntf.Subinterface = ygot.Uint32(index)
 	}
-
 	i := d.GetOrCreateInterface(dutPort.Name())
 	s := i.GetOrCreateSubinterface(index)
 	if vlanID != 0 {
@@ -430,6 +428,7 @@ func TestScaling(t *testing.T) {
 	configureInterfaceDUT(t, dp1, d, "src")
 	configureATE(t, top, ap1, "src", 0, dutPort1.IPv4, atePort1.IPv4CIDR())
 	pushConfig(t, dut, dp1, d)
+	gnmi.Replace(t, dut, gnmi.OC().NetworkInstance(vrf1).Config(), d.GetOrCreateNetworkInstance(vrf1))
 	dp2 := dut.Port(t, "port2")
 	ap2 := ate.Port(t, "port2")
 	// subIntfIPs is the ATE IPv4 addresses for all the subInterfaces
