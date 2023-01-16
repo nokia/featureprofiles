@@ -102,8 +102,8 @@ func TestRouteRemovalNonDefaultVRFFlush(t *testing.T) {
 	ate := ondatra.ATE(t, "ate")
 	ateTop := configureATE(t, ate)
 
-	ateTop.Push(t).StartProtocols(t)
 	configureNetworkInstance(t, dut)
+	ateTop.Push(t).StartProtocols(t)
 
 	// Configure the gRIBI client clientA and make it leader.
 	clientA := &gribi.Client{
@@ -341,7 +341,7 @@ func configureNetworkInstance(t *testing.T, dut *ondatra.DUTDevice) {
 
 	nonDefaultNI := networkInstance(t, nonDefaultVRF)
 	p1 := dut.Port(t, "port1")
-	niIntf := nonDefaultNI.GetOrCreateInterface(p1.Name())
+	niIntf := nonDefaultNI.GetOrCreateInterface(p1.Name() + ".0")
 	niIntf.Subinterface = ygot.Uint32(0)
 	niIntf.Interface = ygot.String(p1.Name())
 
