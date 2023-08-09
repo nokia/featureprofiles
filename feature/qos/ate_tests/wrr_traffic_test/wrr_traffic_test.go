@@ -18,13 +18,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/openconfig/entity-naming/entname"
 	"github.com/openconfig/featureprofiles/internal/deviations"
 	"github.com/openconfig/featureprofiles/internal/fptest"
 	"github.com/openconfig/featureprofiles/internal/qoscfg"
 	"github.com/openconfig/ondatra"
 	"github.com/openconfig/ondatra/gnmi"
 	"github.com/openconfig/ondatra/gnmi/oc"
-	"github.com/openconfig/ondatra/netutil"
 	"github.com/openconfig/ygot/ygot"
 )
 
@@ -124,7 +124,17 @@ func TestWrrTraffic(t *testing.T) {
 	top.Push(t).StartProtocols(t)
 
 	var tolerance float32 = 3.0
-	queues := netutil.CommonTrafficQueues(t, dut)
+	// queues := netutil.CommonTrafficQueues(t, dut)
+
+	queues := entname.CommonTrafficQueueNames{
+		NC1: "NC1",
+		AF4: "AF4",
+		AF3: "AF3",
+		AF2: "AF2",
+		AF1: "AF1",
+		BE1: "BE1",
+		BE0: "BE0",
+	}
 
 	// Test case 1: Non-oversubscription AF3 and AF2 traffic.
 	//   - There should be no packet drop for all traffic classes.
@@ -937,16 +947,7 @@ func ConfigureQoS(t *testing.T, dut *ondatra.DUTDevice) {
 	q := d.GetOrCreateQos()
 	// queues := netutil.CommonTrafficQueues(t, dut)
 
-	type queue struct {
-		NC1 string
-		AF4 string
-		AF3 string
-		AF2 string
-		AF1 string
-		BE1 string
-		BE0 string
-	}
-	queues := queue{
+	queues := entname.CommonTrafficQueueNames{
 		NC1: "NC1",
 		AF4: "AF4",
 		AF3: "AF3",

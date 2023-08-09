@@ -2254,9 +2254,9 @@ func testNokiaSchedulerPoliciesConfig(t *testing.T) {
 	if got, want := gnmi.Get(t, dut, wredUniform.MaxDropProbabilityPercent().State()), ecnConfig.maxDropProbabilityPercent; got != want {
 		t.Errorf("wredUniform.MaxDropProbabilityPercent().State(): got %v, want %v", got, want)
 	}
-	// if got, want := gnmi.Get(t, dut, wredUniform.Weight().State()), ecnConfig.weight; got != want {
-	// 		t.Errorf("wredUniform.Weight().State(): got %v, want %v", got, want)
-	// }
+	if got, want := gnmi.Get(t, dut, wredUniform.Weight().State()), ecnConfig.weight; got != want {
+		t.Errorf("wredUniform.Weight().State(): got %v, want %v", got, want)
+	}
 
 	cases := []struct {
 		desc        string

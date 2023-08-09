@@ -25,7 +25,6 @@ import (
 	"github.com/openconfig/ondatra"
 	"github.com/openconfig/ondatra/gnmi"
 	"github.com/openconfig/ondatra/gnmi/oc"
-	"github.com/openconfig/ondatra/netutil"
 	"github.com/openconfig/ygot/ygot"
 )
 
@@ -104,7 +103,17 @@ func TestBurstyTraffic(t *testing.T) {
 		WithDefaultGateway("198.51.100.4")
 	top.Push(t).StartProtocols(t)
 
-	queues := netutil.CommonTrafficQueues(t, dut)
+	// queues := netutil.CommonTrafficQueues(t, dut)
+
+	queues := entname.CommonTrafficQueueNames{
+		NC1: "NC1",
+		AF4: "AF4",
+		AF3: "AF3",
+		AF2: "AF2",
+		AF1: "AF1",
+		BE1: "BE1",
+		BE0: "BE0",
+	}
 
 	// Test case 1: Bursty NC1 traffic.
 	nc1TrafficFlows := map[string]*trafficData{
@@ -489,6 +498,14 @@ func ConfigureDUTIntf(t *testing.T, dut *ondatra.DUTDevice) {
 		a := s.GetOrCreateAddress(intf.ipAddr)
 		a.PrefixLength = ygot.Uint8(intf.prefixLen)
 		gnmi.Replace(t, dut, gnmi.OC().Interface(intf.intfName).Config(), i)
+		if deviations.ExplicitInterfaceInDefaultVRF(dut) {
+			fptest.AssignToNetworkInstance(t, dut, intf.intfName, deviations.DefaultNetworkInstance(dut), 0)
+		}
+	}
+	if deviations.ExplicitPortSpeed(dut) {
+		fptest.SetPortSpeed(t, dp1)
+		fptest.SetPortSpeed(t, dp2)
+		fptest.SetPortSpeed(t, dp3)
 	}
 }
 
