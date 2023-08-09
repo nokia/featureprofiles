@@ -18,6 +18,7 @@ import (
 	"math"
 	"testing"
 
+	"github.com/openconfig/entity-naming/entname"
 	"github.com/openconfig/featureprofiles/internal/deviations"
 	"github.com/openconfig/featureprofiles/internal/fptest"
 	"github.com/openconfig/featureprofiles/internal/qoscfg"
@@ -63,6 +64,13 @@ var (
 			fn:   testJuniperECNConfig,
 		},
 	}
+	QoSNokiaEcnConfigTestcases = []Testcase{
+		{
+
+			name: "testNokiaECNConfig",
+			fn:   testNokiaECNConfig,
+		},
+	}
 )
 
 // QoS ecn OC config:
@@ -91,8 +99,51 @@ var (
 //     - https://github.com/karimra/gnmic/blob/main/README.md
 //
 
+func ConfigureDUTIntf(t *testing.T, dut *ondatra.DUTDevice) {
+	t.Helper()
+	dp1 := dut.Port(t, "port1")
+	dp2 := dut.Port(t, "port2")
+
+	dutIntfs := []struct {
+		desc      string
+		intfName  string
+		ipAddr    string
+		prefixLen uint8
+	}{{
+		desc:      "Input interface port1",
+		intfName:  dp1.Name(),
+		ipAddr:    "198.51.100.0",
+		prefixLen: 31,
+	}, {
+		desc:      "Output interface port2",
+		intfName:  dp2.Name(),
+		ipAddr:    "198.51.100.2",
+		prefixLen: 31,
+	}}
+
+	// Configure the interfaces.
+	for _, intf := range dutIntfs {
+		t.Logf("Configure DUT interface %s with attributes %v", intf.intfName, intf)
+		i := &oc.Interface{
+			Name:        ygot.String(intf.intfName),
+			Description: ygot.String(intf.desc),
+			Type:        oc.IETFInterfaces_InterfaceType_ethernetCsmacd,
+			Enabled:     ygot.Bool(true),
+		}
+		i.GetOrCreateEthernet()
+		s := i.GetOrCreateSubinterface(0).GetOrCreateIpv4()
+		if deviations.InterfaceEnabled(dut) && !deviations.IPv4MissingEnabled(dut) {
+			s.Enabled = ygot.Bool(true)
+		}
+		a := s.GetOrCreateAddress(intf.ipAddr)
+		a.PrefixLength = ygot.Uint8(intf.prefixLen)
+		gnmi.Replace(t, dut, gnmi.OC().Interface(intf.intfName).Config(), i)
+	}
+}
+
 func TestQosEcnConfigTests(t *testing.T) {
 	dut := ondatra.DUT(t, "dut")
+	// ConfigureDUTIntf(t, dut)
 	switch dut.Vendor() {
 	case ondatra.CISCO:
 		for _, tt := range QoSCiscoEcnConfigTestcases {
@@ -102,6 +153,12 @@ func TestQosEcnConfigTests(t *testing.T) {
 		}
 	case ondatra.JUNIPER:
 		for _, tt := range QoSJuniperEcnConfigTestcases {
+			t.Run(tt.name, func(t *testing.T) {
+				tt.fn(t)
+			})
+		}
+	case ondatra.NOKIA:
+		for _, tt := range QoSNokiaEcnConfigTestcases {
 			t.Run(tt.name, func(t *testing.T) {
 				tt.fn(t)
 			})
@@ -624,6 +681,262 @@ func testJuniperECNConfig(t *testing.T) {
 	wred := queueMgmtProfile.GetOrCreateWred()
 	uniform := wred.GetOrCreateUniform()
 	uniform.SetEnableEcn(ecnConfig.ecnEnabled)
+	uniform.SetMinThreshold(ecnConfig.minThreshold)
+	uniform.SetMaxThreshold(ecnConfig.maxThreshold)
+	uniform.SetMaxDropProbabilityPercent(ecnConfig.maxDropProbabilityPercent)
+
+	t.Logf("qos ECN QueueManagementProfile config cases: %v", ecnConfig)
+	gnmi.Replace(t, dut, gnmi.OC().Qos().Config(), q)
+
+	// Verify the QueueManagementProfile is applied by checking the telemetry path state values.
+	wredUniform := gnmi.OC().Qos().QueueManagementProfile("DropProfile").Wred().Uniform()
+
+	if got, want := gnmi.Get(t, dut, wredUniform.MaxDropProbabilityPercent().State()), ecnConfig.maxDropProbabilityPercent; got != want {
+		t.Errorf("wredUniform.MaxDropProbabilityPercent().State(): got %v, want %v", got, want)
+	}
+
+	if !deviations.StatePathsUnsupported(dut) {
+		if got, want := gnmi.Get(t, dut, wredUniform.MinThreshold().State()), ecnConfig.minThreshold; got != want {
+			t.Errorf("wredUniform.MinThreshold().State(): got %v, want %v", got, want)
+		}
+		if got, want := gnmi.Get(t, dut, wredUniform.MaxThreshold().State()), ecnConfig.maxThreshold; got != want {
+			t.Errorf("wredUniform.MaxThreshold().State(): got %v, want %v", got, want)
+		}
+	}
+
+	if !deviations.DropWeightLeavesUnsupported(dut) {
+
+		uniform.SetDrop(ecnConfig.dropEnabled)
+		uniform.SetWeight(ecnConfig.weight)
+		gnmi.Replace(t, dut, gnmi.OC().Qos().Config(), q)
+
+		if got, want := gnmi.Get(t, dut, wredUniform.Drop().State()), ecnConfig.dropEnabled; got != want {
+			t.Errorf("wredUniform.Drop().State(): got %v, want %v", got, want)
+		}
+		if got, want := gnmi.Get(t, dut, wredUniform.Weight().State()), ecnConfig.weight; got != want {
+			t.Errorf("wredUniform.Weight().State(): got %v, want %v", got, want)
+		}
+	}
+
+	cases := []struct {
+		desc        string
+		targetGroup string
+		ecnProfile  string
+		scheduler   string
+	}{{
+		desc:        "output-interface-BE1",
+		targetGroup: "BE1",
+		ecnProfile:  "DropProfile",
+		scheduler:   "scheduler",
+	}, {
+		desc:        "output-interface-BE0",
+		targetGroup: "BE0",
+		ecnProfile:  "DropProfile",
+		scheduler:   "scheduler",
+	}, {
+		desc:        "output-interface-AF1",
+		targetGroup: "AF1",
+		ecnProfile:  "DropProfile",
+		scheduler:   "scheduler",
+	}, {
+		desc:        "output-interface-AF2",
+		targetGroup: "AF2",
+		ecnProfile:  "DropProfile",
+		scheduler:   "scheduler",
+	}, {
+		desc:        "output-interface-AF3",
+		targetGroup: "AF3",
+		ecnProfile:  "DropProfile",
+		scheduler:   "scheduler",
+	}, {
+		desc:        "output-interface-AF4",
+		targetGroup: "AF4",
+		ecnProfile:  "DropProfile",
+		scheduler:   "scheduler",
+	}, {
+		desc:        "output-interface-NC1",
+		targetGroup: "NC1",
+		ecnProfile:  "DropProfile",
+		scheduler:   "scheduler",
+	}}
+
+	t.Logf("qos output interface config cases: %v", cases)
+	for _, tc := range cases {
+		t.Run(tc.desc, func(t *testing.T) {
+			output := i.GetOrCreateOutput()
+			schedulerPolicy := output.GetOrCreateSchedulerPolicy()
+			schedulerPolicy.SetName(tc.scheduler)
+			queue := output.GetOrCreateQueue(tc.targetGroup)
+			queue.SetQueueManagementProfile(tc.ecnProfile)
+			queue.SetName(tc.targetGroup)
+			gnmi.Replace(t, dut, gnmi.OC().Qos().Config(), q)
+		})
+
+		// Verify the policy is applied by checking the telemetry path state values.
+		policy := gnmi.OC().Qos().Interface(dp.Name()).Output().SchedulerPolicy()
+		outQueue := gnmi.OC().Qos().Interface(dp.Name()).Output().Queue(tc.targetGroup)
+		if !deviations.StatePathsUnsupported(dut) {
+			if got, want := gnmi.Get(t, dut, policy.Name().State()), tc.scheduler; got != want {
+				t.Errorf("policy.Name().State(): got %v, want %v", got, want)
+			}
+			if got, want := gnmi.Get(t, dut, outQueue.Name().State()), tc.targetGroup; got != want {
+				t.Errorf("outQueue.Name().State(): got %v, want %v", got, want)
+			}
+			if got, want := gnmi.Get(t, dut, outQueue.QueueManagementProfile().State()), tc.ecnProfile; got != want {
+				t.Errorf("outQueue.QueueManagementProfile().State(): got %v, want %v", got, want)
+			}
+		}
+		if got, want := gnmi.Get(t, dut, wredUniform.EnableEcn().State()), ecnConfig.ecnEnabled; got != want {
+			t.Errorf("wredUniform.EnableEcn().State(): got %v, want %v", got, want)
+		}
+	}
+}
+
+func testNokiaECNConfig(t *testing.T) {
+	dut := ondatra.DUT(t, "dut")
+	d := &oc.Root{}
+	q := d.GetOrCreateQos()
+	dp := dut.Port(t, "port2")
+	i := q.GetOrCreateInterface(dp.Name())
+	i.SetInterfaceId(dp.Name())
+	i.GetOrCreateInterfaceRef().Interface = ygot.String(dp.Name())
+	// i.GetOrCreateInterfaceRef().Subinterface = ygot.Uint32(0)
+	// queues := netutil.CommonTrafficQueues(t, dut)
+	queues := entname.CommonTrafficQueueNames{
+		NC1: "NC1",
+		AF4: "AF4",
+		AF3: "AF3",
+		AF2: "AF2",
+		AF1: "AF1",
+		BE1: "BE1",
+		BE0: "BE0",
+	}
+
+	schedulers := []struct {
+		desc           string
+		sequence       uint32
+		priority       oc.E_Scheduler_Priority
+		inputID        string
+		inputType      oc.E_Input_InputType
+		weight         uint64
+		queueName      string
+		targetGroup    string
+		fabricPriority uint8
+	}{{
+		desc:           "scheduler-policy-BE1",
+		sequence:       uint32(1),
+		priority:       oc.Scheduler_Priority_UNSET,
+		inputID:        "BE1",
+		inputType:      oc.Input_InputType_QUEUE,
+		weight:         uint64(1),
+		queueName:      queues.BE1,
+		targetGroup:    "BE1",
+		fabricPriority: 1,
+	}, {
+		desc:           "scheduler-policy-BE0",
+		sequence:       uint32(1),
+		priority:       oc.Scheduler_Priority_UNSET,
+		inputID:        "BE0",
+		inputType:      oc.Input_InputType_QUEUE,
+		weight:         uint64(2),
+		queueName:      queues.BE0,
+		targetGroup:    "BE0",
+		fabricPriority: 2,
+	}, {
+		desc:           "scheduler-policy-AF1",
+		sequence:       uint32(1),
+		priority:       oc.Scheduler_Priority_UNSET,
+		inputID:        "AF1",
+		inputType:      oc.Input_InputType_QUEUE,
+		weight:         uint64(4),
+		queueName:      queues.AF1,
+		targetGroup:    "AF1",
+		fabricPriority: 3,
+	}, {
+		desc:           "scheduler-policy-AF2",
+		sequence:       uint32(1),
+		priority:       oc.Scheduler_Priority_UNSET,
+		inputID:        "AF2",
+		inputType:      oc.Input_InputType_QUEUE,
+		weight:         uint64(8),
+		queueName:      queues.AF2,
+		targetGroup:    "AF2",
+		fabricPriority: 4,
+	}, {
+		desc:           "scheduler-policy-AF3",
+		sequence:       uint32(1),
+		priority:       oc.Scheduler_Priority_UNSET,
+		inputID:        "AF3",
+		inputType:      oc.Input_InputType_QUEUE,
+		weight:         uint64(16),
+		queueName:      queues.AF3,
+		targetGroup:    "AF3",
+		fabricPriority: 5,
+	}, {
+		desc:           "scheduler-policy-AF4",
+		sequence:       uint32(0),
+		priority:       oc.Scheduler_Priority_STRICT,
+		inputID:        "AF4",
+		inputType:      oc.Input_InputType_QUEUE,
+		weight:         uint64(99),
+		queueName:      queues.AF4,
+		targetGroup:    "AF4",
+		fabricPriority: 6,
+	}, {
+		desc:           "scheduler-policy-NC1",
+		sequence:       uint32(0),
+		priority:       oc.Scheduler_Priority_STRICT,
+		inputID:        "NC1",
+		inputType:      oc.Input_InputType_QUEUE,
+		weight:         uint64(100),
+		queueName:      queues.NC1,
+		targetGroup:    "NC1",
+		fabricPriority: 7,
+	}}
+
+	schedulerPolicy := q.GetOrCreateSchedulerPolicy("scheduler")
+	schedulerPolicy.SetName("scheduler")
+	t.Logf("qos scheduler policies config cases: %v", schedulers)
+	t.Logf("LC: qoscfg : %v", q)
+	for _, tc := range schedulers {
+		t.Run(tc.desc, func(t *testing.T) {
+			qoscfg.SetForwardingGroupWithFabricPriority(t, dut, q, tc.targetGroup, tc.queueName, tc.fabricPriority)
+			s := schedulerPolicy.GetOrCreateScheduler(tc.sequence)
+			s.SetSequence(tc.sequence)
+			s.SetPriority(tc.priority)
+			input := s.GetOrCreateInput(tc.inputID)
+			input.SetId(tc.inputID)
+			input.SetInputType(tc.inputType)
+			input.SetQueue(tc.queueName)
+			if tc.priority != oc.Scheduler_Priority_STRICT {
+				input.SetWeight(tc.weight)
+			}
+			gnmi.Replace(t, dut, gnmi.OC().Qos().Config(), q)
+		})
+	}
+
+	ecnConfig := struct {
+		ecnEnabled                bool
+		dropEnabled               bool
+		minThreshold              uint64
+		maxThreshold              uint64
+		maxDropProbabilityPercent uint8
+		weight                    uint32
+	}{
+		ecnEnabled:                true,
+		dropEnabled:               false,
+		minThreshold:              uint64(80000),
+		maxThreshold:              math.MaxUint64,
+		maxDropProbabilityPercent: uint8(1),
+		weight:                    uint32(0),
+	}
+
+	queueMgmtProfile := q.GetOrCreateQueueManagementProfile("DropProfile")
+	queueMgmtProfile.SetName("DropProfile")
+	wred := queueMgmtProfile.GetOrCreateWred()
+	uniform := wred.GetOrCreateUniform()
+	uniform.SetEnableEcn(ecnConfig.ecnEnabled)
+	uniform.SetDrop(ecnConfig.dropEnabled)
 	uniform.SetMinThreshold(ecnConfig.minThreshold)
 	uniform.SetMaxThreshold(ecnConfig.maxThreshold)
 	uniform.SetMaxDropProbabilityPercent(ecnConfig.maxDropProbabilityPercent)

@@ -29,6 +29,9 @@ platform_exceptions: {
   deviations: {
     explicit_interface_ref_definition: true
     interface_enabled: true
+    explicit_port_speed: true
+    explicit_interface_in_default_vrf: true
+
   }
 }
 platform_exceptions: {
