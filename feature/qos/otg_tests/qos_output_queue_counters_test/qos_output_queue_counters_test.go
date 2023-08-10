@@ -165,6 +165,10 @@ func TestQoSCounters(t *testing.T) {
 		flow.Duration().FixedPackets().SetPackets(10000)
 	}
 
+	ate.OTG().PushConfig(t, top)
+	ate.OTG().StartProtocols(t)
+	otgutils.WaitForARP(t, ate.OTG(), top, "IPv4")
+
 	var counterNames []string
 	counters := make(map[string]map[string]uint64)
 
@@ -225,10 +229,6 @@ func TestQoSCounters(t *testing.T) {
 		}
 	}
 
-	ate.OTG().PushConfig(t, top)
-	ate.OTG().StartProtocols(t)
-	otgutils.WaitForARP(t, ate.OTG(), top, "IPv4")
-
 	t.Logf("Running traffic 1 on DUT interfaces: %s => %s ", dp1.Name(), dp2.Name())
 	t.Logf("Sending traffic flows: \n%v\n\n", trafficFlows)
 	ate.OTG().StartTraffic(t)
@@ -278,7 +278,7 @@ func TestQoSCounters(t *testing.T) {
 		}
 
 		dutOctetCounterDiff := counters["dutQosOctetsAfterTraffic"][data.queue] - counters["dutQosOctetsBeforeTraffic"][data.queue]
-		ateOctetCounterDiff := counters["ateInPkts"][data.queue] * uint64(data.frameSize)
+		ateOctetCounterDiff := counters["ateInPkts"][data.queue] * uint64(data.frameSize-14)
 		t.Logf("Queue %q: ateOctetCounterDiff: %v dutOctetCounterDiff: %v", data.queue, ateOctetCounterDiff, dutOctetCounterDiff)
 		if !deviations.QOSOctets(dut) {
 			if dutOctetCounterDiff < ateOctetCounterDiff {

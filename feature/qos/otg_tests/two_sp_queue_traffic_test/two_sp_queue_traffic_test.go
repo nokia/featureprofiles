@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/openconfig/entity-naming/entname"
 	"github.com/openconfig/featureprofiles/internal/attrs"
 	"github.com/openconfig/featureprofiles/internal/deviations"
 	"github.com/openconfig/featureprofiles/internal/fptest"
@@ -26,7 +27,6 @@ import (
 	"github.com/openconfig/ondatra"
 	"github.com/openconfig/ondatra/gnmi"
 	"github.com/openconfig/ondatra/gnmi/oc"
-	"github.com/openconfig/ondatra/netutil"
 	"github.com/openconfig/ygnmi/ygnmi"
 	"github.com/openconfig/ygot/ygot"
 )
@@ -162,7 +162,15 @@ func TestTwoSPQueueTraffic(t *testing.T) {
 	intf3.AddToOTG(top, ap3, &dutPort3)
 
 	var tolerance float32 = 2.0
-	queues := netutil.CommonTrafficQueues(t, dut)
+	queues := entname.CommonTrafficQueueNames{
+		NC1: "NC1",
+		AF4: "AF4",
+		AF3: "AF3",
+		AF2: "AF2",
+		AF1: "AF1",
+		BE1: "BE1",
+		BE0: "BE0",
+	}
 
 	// Test case 1: Non-oversubscription NC1 and AF4 traffic.
 	//   - There should be no packet drop for all traffic classes.
@@ -1203,6 +1211,14 @@ func ConfigureDUTIntf(t *testing.T, dut *ondatra.DUTDevice) {
 		a := s.GetOrCreateAddress(intf.ipAddr)
 		a.PrefixLength = ygot.Uint8(intf.prefixLen)
 		gnmi.Replace(t, dut, gnmi.OC().Interface(intf.intfName).Config(), i)
+		if deviations.ExplicitInterfaceInDefaultVRF(dut) {
+			fptest.AssignToNetworkInstance(t, dut, intf.intfName, deviations.DefaultNetworkInstance(dut), 0)
+		}
+	}
+	if deviations.ExplicitPortSpeed(dut) {
+		fptest.SetPortSpeed(t, dp1)
+		fptest.SetPortSpeed(t, dp2)
+		fptest.SetPortSpeed(t, dp3)
 	}
 }
 
@@ -1213,46 +1229,63 @@ func ConfigureQoS(t *testing.T, dut *ondatra.DUTDevice) {
 	dp3 := dut.Port(t, "port3")
 	d := &oc.Root{}
 	q := d.GetOrCreateQos()
-	queues := netutil.CommonTrafficQueues(t, dut)
+	queues := entname.CommonTrafficQueueNames{
+		NC1: "NC1",
+		AF4: "AF4",
+		AF3: "AF3",
+		AF2: "AF2",
+		AF1: "AF1",
+		BE1: "BE1",
+		BE0: "BE0",
+	}
 
 	t.Logf("Create qos forwarding groups config")
 	forwardingGroups := []struct {
-		desc        string
-		queueName   string
-		targetGroup string
+		desc           string
+		queueName      string
+		fabricPriority uint8
+		targetGroup    string
 	}{{
-		desc:        "forwarding-group-BE1",
-		queueName:   queues.BE1,
-		targetGroup: "target-group-BE1",
+		desc:           "forwarding-group-BE1",
+		queueName:      queues.BE1,
+		fabricPriority: 1,
+		targetGroup:    "target-group-BE1",
 	}, {
-		desc:        "forwarding-group-BE0",
-		queueName:   queues.BE0,
-		targetGroup: "target-group-BE0",
+		desc:           "forwarding-group-BE0",
+		queueName:      queues.BE0,
+		fabricPriority: 2,
+		targetGroup:    "target-group-BE0",
 	}, {
-		desc:        "forwarding-group-AF1",
-		queueName:   queues.AF1,
-		targetGroup: "target-group-AF1",
+		desc:           "forwarding-group-AF1",
+		queueName:      queues.AF1,
+		fabricPriority: 3,
+		targetGroup:    "target-group-AF1",
 	}, {
-		desc:        "forwarding-group-AF2",
-		queueName:   queues.AF2,
-		targetGroup: "target-group-AF2",
+		desc:           "forwarding-group-AF2",
+		queueName:      queues.AF2,
+		fabricPriority: 4,
+		targetGroup:    "target-group-AF2",
 	}, {
-		desc:        "forwarding-group-AF3",
-		queueName:   queues.AF3,
-		targetGroup: "target-group-AF3",
+		desc:           "forwarding-group-AF3",
+		queueName:      queues.AF3,
+		fabricPriority: 5,
+		targetGroup:    "target-group-AF3",
 	}, {
-		desc:        "forwarding-group-AF4",
-		queueName:   queues.AF4,
-		targetGroup: "target-group-AF4",
+		desc:           "forwarding-group-AF4",
+		queueName:      queues.AF4,
+		fabricPriority: 6,
+		targetGroup:    "target-group-AF4",
 	}, {
-		desc:        "forwarding-group-NC1",
-		queueName:   queues.NC1,
-		targetGroup: "target-group-NC1",
+		desc:           "forwarding-group-NC1",
+		queueName:      queues.NC1,
+		fabricPriority: 7,
+		targetGroup:    "target-group-NC1",
 	}}
 
 	t.Logf("qos forwarding groups config: %v", forwardingGroups)
 	for _, tc := range forwardingGroups {
-		qoscfg.SetForwardingGroup(t, dut, q, tc.targetGroup, tc.queueName)
+		// qoscfg.SetForwardingGroup(t, dut, q, tc.targetGroup, tc.queueName)
+		qoscfg.SetForwardingGroupWithFabricPriority(t, dut, q, tc.targetGroup, tc.queueName, tc.fabricPriority)
 	}
 
 	t.Logf("Create qos Classifiers config")
@@ -1511,7 +1544,9 @@ func ConfigureQoS(t *testing.T, dut *ondatra.DUTDevice) {
 		input.SetId(tc.inputID)
 		input.SetInputType(tc.inputType)
 		input.SetQueue(tc.queueName)
-		input.SetWeight(tc.weight)
+		if tc.priority != oc.Scheduler_Priority_STRICT {
+			input.SetWeight(tc.weight)
+		}
 		gnmi.Replace(t, dut, gnmi.OC().Qos().Config(), q)
 	}
 
