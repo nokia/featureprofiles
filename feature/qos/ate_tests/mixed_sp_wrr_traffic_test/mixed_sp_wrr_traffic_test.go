@@ -37,6 +37,8 @@ type trafficData struct {
 	inputIntf             *ondatra.Interface
 }
 
+var egressEncapsulationHeader uint32
+
 func TestMain(m *testing.M) {
 	fptest.RunTests(m)
 }
@@ -78,6 +80,10 @@ func TestMixedSPWrrTraffic(t *testing.T) {
 		ConfigureCiscoQos(t, dut)
 	} else {
 		ConfigureQoS(t, dut)
+	}
+	egressEncapsulationHeader = 0
+	if dut.Vendor() == ondatra.NOKIA {
+		egressEncapsulationHeader = 14
 	}
 
 	// Configure ATE interfaces.
@@ -602,7 +608,7 @@ func TestMixedSPWrrTraffic(t *testing.T) {
 				}
 
 				dutOctetCounterDiff := counters["dutQosOctetsAfterTraffic"][data.queue] - counters["dutQosOctetsBeforeTraffic"][data.queue]
-				ateOctetCounterDiff := counters["ateInPkts"][data.queue] * uint64(data.frameSize)
+				ateOctetCounterDiff := counters["ateInPkts"][data.queue] * uint64(data.frameSize-egressEncapsulationHeader)
 				t.Logf("Queue %q: ateOctetCounterDiff: %v dutOctetCounterDiff: %v", data.queue, ateOctetCounterDiff, dutOctetCounterDiff)
 				if !deviations.QOSOctets(dut) {
 					if dutOctetCounterDiff < ateOctetCounterDiff {
