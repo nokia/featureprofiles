@@ -2063,8 +2063,6 @@ func testNokiaSchedulerPoliciesConfig(t *testing.T) {
 	dp := dut.Port(t, "port2")
 	i := q.GetOrCreateInterface(dp.Name())
 	i.SetInterfaceId(dp.Name())
-	// i.GetOrCreateInterfaceRef().Interface = ygot.String(dp.Name())
-	// i.GetOrCreateInterfaceRef().Subinterface = ygot.Uint32(0)
 
 	ip := &oc.Interface{Name: ygot.String(dp.Name())}
 	ip.Type = oc.IETFInterfaces_InterfaceType_ethernetCsmacd
