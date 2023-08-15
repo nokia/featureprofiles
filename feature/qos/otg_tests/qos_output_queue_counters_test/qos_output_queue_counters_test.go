@@ -662,7 +662,6 @@ func ConfigureQoS(t *testing.T, dut *ondatra.DUTDevice) {
 		input.SetId(tc.inputID)
 		input.SetInputType(tc.inputType)
 		input.SetQueue(tc.queueName)
-		input.SetWeight(tc.weight)
 		if dut.Vendor() == ondatra.NOKIA {
 			if tc.priority != oc.Scheduler_Priority_STRICT {
 				input.SetWeight(tc.weight)
