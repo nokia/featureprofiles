@@ -26,8 +26,7 @@ import (
 	"github.com/openconfig/ondatra"
 	"github.com/openconfig/ondatra/gnmi"
 	"github.com/openconfig/ondatra/gnmi/oc"
-
-	// "github.com/openconfig/ondatra/netutil"
+	"github.com/openconfig/ondatra/netutil"
 	"github.com/openconfig/ygnmi/ygnmi"
 	"github.com/openconfig/ygot/ygot"
 )
@@ -110,25 +109,7 @@ func TestQoSCounters(t *testing.T) {
 	eth2.Connection().SetChoice(gosnappi.EthernetConnectionChoice.PORT_NAME).SetPortName(ap2.ID())
 	eth2.Ipv4Addresses().Add().SetName(dev2.Name() + ".ipv4").SetAddress(ateDstIp).SetGateway(ateDstGateway).SetPrefix(int32(prefixLen))
 
-	// queues := netutil.CommonTrafficQueues(t, dut)
-	type queue struct {
-		NC1 string
-		AF4 string
-		AF3 string
-		AF2 string
-		AF1 string
-		BE1 string
-		BE0 string
-	}
-	queues := queue{
-		NC1: "NC1",
-		AF4: "AF4",
-		AF3: "AF3",
-		AF2: "AF2",
-		AF1: "AF1",
-		BE1: "BE1",
-		BE0: "BE0",
-	}
+	queues := netutil.CommonTrafficQueues(t, dut)
 	var trafficFlows map[string]*trafficData
 
 	switch dut.Vendor() {
@@ -194,10 +175,6 @@ func TestQoSCounters(t *testing.T) {
 		flow.Duration().FixedPackets().SetPackets(10000)
 	}
 
-	ate.OTG().PushConfig(t, top)
-	ate.OTG().StartProtocols(t)
-	otgutils.WaitForARP(t, ate.OTG(), top, "IPv4")
-
 	var counterNames []string
 	counters := make(map[string]map[string]uint64)
 
@@ -257,6 +234,10 @@ func TestQoSCounters(t *testing.T) {
 			counters["dutQosDroppedOctetsBeforeTraffic"][data.queue], _ = count.Val()
 		}
 	}
+
+	ate.OTG().PushConfig(t, top)
+	ate.OTG().StartProtocols(t)
+	otgutils.WaitForARP(t, ate.OTG(), top, "IPv4")
 
 	t.Logf("Running traffic 1 on DUT interfaces: %s => %s ", dp1.Name(), dp2.Name())
 	t.Logf("Sending traffic flows: \n%v\n\n", trafficFlows)
@@ -381,25 +362,7 @@ func ConfigureQoS(t *testing.T, dut *ondatra.DUTDevice) {
 	dp2 := dut.Port(t, "port2")
 	d := &oc.Root{}
 	q := d.GetOrCreateQos()
-	// queues := netutil.CommonTrafficQueues(t, dut)
-	type queue struct {
-		NC1 string
-		AF4 string
-		AF3 string
-		AF2 string
-		AF1 string
-		BE1 string
-		BE0 string
-	}
-	queues := queue{
-		NC1: "NC1",
-		AF4: "AF4",
-		AF3: "AF3",
-		AF2: "AF2",
-		AF1: "AF1",
-		BE1: "BE1",
-		BE0: "BE0",
-	}
+	queues := netutil.CommonTrafficQueues(t, dut)
 
 	nc1InputWeight := uint64(200)
 	af4InputWeight := uint64(100)
@@ -412,49 +375,52 @@ func ConfigureQoS(t *testing.T, dut *ondatra.DUTDevice) {
 	forwardingGroups := []struct {
 		desc           string
 		queueName      string
-		fabricPriority uint8
 		targetGroup    string
+		fabricPriority uint8
 	}{{
 		desc:           "forwarding-group-BE1",
 		queueName:      queues.BE1,
-		fabricPriority: 1,
 		targetGroup:    "target-group-BE1",
+		fabricPriority: 1,
 	}, {
 		desc:           "forwarding-group-BE0",
 		queueName:      queues.BE0,
-		fabricPriority: 2,
 		targetGroup:    "target-group-BE0",
+		fabricPriority: 2,
 	}, {
 		desc:           "forwarding-group-AF1",
 		queueName:      queues.AF1,
-		fabricPriority: 3,
 		targetGroup:    "target-group-AF1",
+		fabricPriority: 3,
 	}, {
 		desc:           "forwarding-group-AF2",
 		queueName:      queues.AF2,
-		fabricPriority: 4,
 		targetGroup:    "target-group-AF2",
+		fabricPriority: 4,
 	}, {
 		desc:           "forwarding-group-AF3",
 		queueName:      queues.AF3,
-		fabricPriority: 5,
 		targetGroup:    "target-group-AF3",
+		fabricPriority: 5,
 	}, {
 		desc:           "forwarding-group-AF4",
 		queueName:      queues.AF4,
-		fabricPriority: 6,
 		targetGroup:    "target-group-AF4",
+		fabricPriority: 6,
 	}, {
 		desc:           "forwarding-group-NC1",
 		queueName:      queues.NC1,
-		fabricPriority: 7,
 		targetGroup:    "target-group-NC1",
+		fabricPriority: 7,
 	}}
 
 	t.Logf("qos forwarding groups config: %v", forwardingGroups)
 	for _, tc := range forwardingGroups {
-		// qoscfg.SetForwardingGroup(t, dut, q, tc.targetGroup, tc.queueName)
-		qoscfg.SetForwardingGroupWithFabricPriority(t, dut, q, tc.targetGroup, tc.queueName, tc.fabricPriority)
+		if dut.Vendor() == ondatra.NOKIA {
+			qoscfg.SetForwardingGroupWithFabricPriority(t, dut, q, tc.targetGroup, tc.queueName, tc.fabricPriority)
+		} else {
+			qoscfg.SetForwardingGroup(t, dut, q, tc.targetGroup, tc.queueName)
+		}
 	}
 
 	t.Logf("Create qos Classifiers config")
@@ -696,7 +662,12 @@ func ConfigureQoS(t *testing.T, dut *ondatra.DUTDevice) {
 		input.SetId(tc.inputID)
 		input.SetInputType(tc.inputType)
 		input.SetQueue(tc.queueName)
-		if tc.priority != oc.Scheduler_Priority_STRICT {
+		input.SetWeight(tc.weight)
+		if dut.Vendor() == ondatra.NOKIA {
+			if tc.priority != oc.Scheduler_Priority_STRICT {
+				input.SetWeight(tc.weight)
+			}
+		} else {
 			input.SetWeight(tc.weight)
 		}
 		gnmi.Replace(t, dut, gnmi.OC().Qos().Config(), q)
