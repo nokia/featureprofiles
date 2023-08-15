@@ -26,6 +26,7 @@ import (
 	"github.com/openconfig/ondatra"
 	"github.com/openconfig/ondatra/gnmi"
 	"github.com/openconfig/ondatra/gnmi/oc"
+	"github.com/openconfig/ondatra/netutil"
 	"github.com/openconfig/ygnmi/ygnmi"
 	"github.com/openconfig/ygot/ygot"
 )
@@ -124,15 +125,7 @@ func TestBasicConfigWithTraffic(t *testing.T) {
 	intf3.AddToOTG(top, ap3, &dutPort3)
 	ate.OTG().PushConfig(t, top)
 
-	queues := entname.CommonTrafficQueueNames{
-		NC1: "NC1",
-		AF4: "AF4",
-		AF3: "AF3",
-		AF2: "AF2",
-		AF1: "AF1",
-		BE1: "BE1",
-		BE0: "BE0",
-	}
+	queues := netutil.CommonTrafficQueues(t, dut)
 
 	// Test case 1: Non-oversubscription traffic with 80% of linerate.
 	//   - There should be no packet drop for all traffic classes.
@@ -601,15 +594,7 @@ func ConfigureQoS(t *testing.T, dut *ondatra.DUTDevice) {
 	dp3 := dut.Port(t, "port3")
 	d := &oc.Root{}
 	q := d.GetOrCreateQos()
-	queues := entname.CommonTrafficQueueNames{
-		NC1: "NC1",
-		AF4: "AF4",
-		AF3: "AF3",
-		AF2: "AF2",
-		AF1: "AF1",
-		BE1: "BE1",
-		BE0: "BE0",
-	}
+	queues := netutil.CommonTrafficQueues(t, dut)
 
 	t.Logf("Create qos forwarding groups and queue name config")
 	forwardingGroups := []struct {
@@ -656,7 +641,11 @@ func ConfigureQoS(t *testing.T, dut *ondatra.DUTDevice) {
 
 	t.Logf("qos forwarding groups config: %v", forwardingGroups)
 	for _, tc := range forwardingGroups {
-		qoscfg.SetForwardingGroupWithFabricPriority(t, dut, q, tc.targetGroup, tc.queueName, tc.fabricPriority)
+		if dut.Vendor() == ondatra.NOKIA {
+			qoscfg.SetForwardingGroupWithFabricPriority(t, dut, q, tc.targetGroup, tc.queueName, tc.fabricPriority)
+		} else {
+			qoscfg.SetForwardingGroup(t, dut, q, tc.targetGroup, tc.queueName)
+		}
 	}
 
 	t.Logf("Create qos queue management profile config")
@@ -676,6 +665,9 @@ func ConfigureQoS(t *testing.T, dut *ondatra.DUTDevice) {
 	uniform := wred.GetOrCreateUniform()
 	uniform.SetEnableEcn(ecnConfig.ecnEnabled)
 	uniform.SetMinThreshold(ecnConfig.minThreshold)
+	if dut.Vendor() == ondatra.NOKIA {
+		uniform.SetDrop(false)
+	}
 	gnmi.Replace(t, dut, gnmi.OC().Qos().Config(), q)
 
 	t.Logf("Create qos Classifiers config")
@@ -991,6 +983,10 @@ func ConfigureQoS(t *testing.T, dut *ondatra.DUTDevice) {
 	for _, tc := range schedulerIntfs {
 		i := q.GetOrCreateInterface(dp3.Name())
 		i.SetInterfaceId(dp3.Name())
+		i.GetOrCreateInterfaceRef().Interface = ygot.String(dp3.Name())
+		if deviations.InterfaceRefConfigUnsupported(dut) {
+			i.InterfaceRef = nil
+		}
 		output := i.GetOrCreateOutput()
 		schedulerPolicy := output.GetOrCreateSchedulerPolicy()
 		schedulerPolicy.SetName(tc.scheduler)

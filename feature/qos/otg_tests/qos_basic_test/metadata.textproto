@@ -32,6 +32,7 @@ platform_exceptions: {
     interface_enabled: true
     explicit_port_speed: true
     explicit_interface_in_default_vrf: true
+    qos_octets: true
   }
 }
 platform_exceptions: {
