@@ -40,9 +40,17 @@ type testCase struct {
 // showRunningConfig returns the output of 'show running-config' on the device.
 func showRunningConfig(t *testing.T, dut *ondatra.DUTDevice) string {
 	t.Helper()
-	runningConfig, err := dut.RawAPIs().CLI(t).SendCommand(context.Background(), "show running-config")
+	var runningConfig string
+	var err error
+
+	switch vendor := dut.Vendor(); vendor {
+	case ondatra.NOKIA:
+		runningConfig, err = dut.RawAPIs().CLI(t).SendCommand(context.Background(), "sr_cli info /")
+	default:
+		runningConfig, err = dut.RawAPIs().CLI(t).SendCommand(context.Background(), "show running-config")
+	}
 	if err != nil {
-		t.Fatalf("'show running-config' failed: %v", err)
+		t.Fatalf("'running-config' failed: %v", err)
 	}
 	return runningConfig
 }
@@ -145,6 +153,8 @@ func getTestcase(t *testing.T, dut *ondatra.DUTDevice) testCase {
 	case ondatra.ARISTA:
 		cliConfig = `qos traffic-class 0 name target-group-TEST
 qos tx-queue 0 name TEST`
+	case ondatra.NOKIA:
+		cliConfig = `set qos forwarding-classes forwarding-class target-group-TEST forwarding-class-index 1 output unicast-queue TEST`
 	default:
 		t.Skipf("Unsupported vendor device: %v", vendor)
 	}
