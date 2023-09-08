@@ -14,12 +14,3 @@ platform_exceptions: {
     drop_weight_leaves_unsupported: true
   }
 }
-platform_exceptions: {
-  platform: {
-    vendor: NOKIA
-  }
-  deviations: {
-    state_path_unsupported: true
-    drop_weight_leaves_unsupported: true
-  }
-}

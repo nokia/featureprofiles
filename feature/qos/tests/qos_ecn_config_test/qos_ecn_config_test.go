@@ -15,9 +15,9 @@
 package qos_ecn_config_test
 
 import (
+	"math"
 	"testing"
 
-	"github.com/openconfig/entity-naming/entname"
 	"github.com/openconfig/featureprofiles/internal/deviations"
 	"github.com/openconfig/featureprofiles/internal/fptest"
 	"github.com/openconfig/featureprofiles/internal/qoscfg"
@@ -98,51 +98,8 @@ var (
 //     - https://github.com/karimra/gnmic/blob/main/README.md
 //
 
-func ConfigureDUTIntf(t *testing.T, dut *ondatra.DUTDevice) {
-	t.Helper()
-	dp1 := dut.Port(t, "port1")
-	dp2 := dut.Port(t, "port2")
-
-	dutIntfs := []struct {
-		desc      string
-		intfName  string
-		ipAddr    string
-		prefixLen uint8
-	}{{
-		desc:      "Input interface port1",
-		intfName:  dp1.Name(),
-		ipAddr:    "198.51.100.0",
-		prefixLen: 31,
-	}, {
-		desc:      "Output interface port2",
-		intfName:  dp2.Name(),
-		ipAddr:    "198.51.100.2",
-		prefixLen: 31,
-	}}
-
-	// Configure the interfaces.
-	for _, intf := range dutIntfs {
-		t.Logf("Configure DUT interface %s with attributes %v", intf.intfName, intf)
-		i := &oc.Interface{
-			Name:        ygot.String(intf.intfName),
-			Description: ygot.String(intf.desc),
-			Type:        oc.IETFInterfaces_InterfaceType_ethernetCsmacd,
-			Enabled:     ygot.Bool(true),
-		}
-		i.GetOrCreateEthernet()
-		s := i.GetOrCreateSubinterface(0).GetOrCreateIpv4()
-		if deviations.InterfaceEnabled(dut) && !deviations.IPv4MissingEnabled(dut) {
-			s.Enabled = ygot.Bool(true)
-		}
-		a := s.GetOrCreateAddress(intf.ipAddr)
-		a.PrefixLength = ygot.Uint8(intf.prefixLen)
-		gnmi.Replace(t, dut, gnmi.OC().Interface(intf.intfName).Config(), i)
-	}
-}
-
 func TestQosEcnConfigTests(t *testing.T) {
 	dut := ondatra.DUT(t, "dut")
-	// ConfigureDUTIntf(t, dut)
 	switch dut.Vendor() {
 	case ondatra.CISCO:
 		for _, tt := range QoSCiscoEcnConfigTestcases {
@@ -798,108 +755,95 @@ func testNokiaECNConfig(t *testing.T) {
 	dp := dut.Port(t, "port2")
 	i := q.GetOrCreateInterface(dp.Name())
 	i.SetInterfaceId(dp.Name())
-	i.GetOrCreateInterfaceRef().Interface = ygot.String(dp.Name())
-	// i.GetOrCreateInterfaceRef().Subinterface = ygot.Uint32(0)
-	// queues := netutil.CommonTrafficQueues(t, dut)
-	queues := entname.CommonTrafficQueueNames{
-		NC1: "NC1",
-		AF4: "AF4",
-		AF3: "AF3",
-		AF2: "AF2",
-		AF1: "AF1",
-		BE1: "BE1",
-		BE0: "BE0",
+	queues := netutil.CommonTrafficQueues(t, dut)
+	queueNames := []string{queues.NC1, queues.AF4, queues.AF3, queues.AF2, queues.AF1, queues.BE0, queues.BE1}
+	for i, queue := range queueNames {
+		q1 := q.GetOrCreateQueue(queue)
+		q1.Name = ygot.String(queue)
+		queueid := len(queueNames) - i
+		q1.QueueId = ygot.Uint8(uint8(queueid))
 	}
 
 	schedulers := []struct {
-		desc           string
-		sequence       uint32
-		priority       oc.E_Scheduler_Priority
-		inputID        string
-		inputType      oc.E_Input_InputType
-		weight         uint64
-		queueName      string
-		targetGroup    string
-		fabricPriority uint8
+		desc        string
+		sequence    uint32
+		priority    oc.E_Scheduler_Priority
+		inputID     string
+		inputType   oc.E_Input_InputType
+		weight      uint64
+		queueName   string
+		targetGroup string
 	}{{
-		desc:           "scheduler-policy-BE1",
-		sequence:       uint32(1),
-		priority:       oc.Scheduler_Priority_UNSET,
-		inputID:        "BE1",
-		inputType:      oc.Input_InputType_QUEUE,
-		weight:         uint64(1),
-		queueName:      queues.BE1,
-		targetGroup:    "BE1",
-		fabricPriority: 1,
+		desc:        "scheduler-policy-BE1",
+		sequence:    uint32(1),
+		priority:    oc.Scheduler_Priority_UNSET,
+		inputID:     "BE1",
+		inputType:   oc.Input_InputType_QUEUE,
+		weight:      uint64(1),
+		queueName:   queues.BE1,
+		targetGroup: "BE1",
 	}, {
-		desc:           "scheduler-policy-BE0",
-		sequence:       uint32(1),
-		priority:       oc.Scheduler_Priority_UNSET,
-		inputID:        "BE0",
-		inputType:      oc.Input_InputType_QUEUE,
-		weight:         uint64(2),
-		queueName:      queues.BE0,
-		targetGroup:    "BE0",
-		fabricPriority: 2,
+		desc:        "scheduler-policy-BE0",
+		sequence:    uint32(1),
+		priority:    oc.Scheduler_Priority_UNSET,
+		inputID:     "BE0",
+		inputType:   oc.Input_InputType_QUEUE,
+		weight:      uint64(2),
+		queueName:   queues.BE0,
+		targetGroup: "BE0",
 	}, {
-		desc:           "scheduler-policy-AF1",
-		sequence:       uint32(1),
-		priority:       oc.Scheduler_Priority_UNSET,
-		inputID:        "AF1",
-		inputType:      oc.Input_InputType_QUEUE,
-		weight:         uint64(4),
-		queueName:      queues.AF1,
-		targetGroup:    "AF1",
-		fabricPriority: 3,
+		desc:        "scheduler-policy-AF1",
+		sequence:    uint32(1),
+		priority:    oc.Scheduler_Priority_UNSET,
+		inputID:     "AF1",
+		inputType:   oc.Input_InputType_QUEUE,
+		weight:      uint64(4),
+		queueName:   queues.AF1,
+		targetGroup: "AF1",
 	}, {
-		desc:           "scheduler-policy-AF2",
-		sequence:       uint32(1),
-		priority:       oc.Scheduler_Priority_UNSET,
-		inputID:        "AF2",
-		inputType:      oc.Input_InputType_QUEUE,
-		weight:         uint64(8),
-		queueName:      queues.AF2,
-		targetGroup:    "AF2",
-		fabricPriority: 4,
+		desc:        "scheduler-policy-AF2",
+		sequence:    uint32(1),
+		priority:    oc.Scheduler_Priority_UNSET,
+		inputID:     "AF2",
+		inputType:   oc.Input_InputType_QUEUE,
+		weight:      uint64(8),
+		queueName:   queues.AF2,
+		targetGroup: "AF2",
 	}, {
-		desc:           "scheduler-policy-AF3",
-		sequence:       uint32(1),
-		priority:       oc.Scheduler_Priority_UNSET,
-		inputID:        "AF3",
-		inputType:      oc.Input_InputType_QUEUE,
-		weight:         uint64(16),
-		queueName:      queues.AF3,
-		targetGroup:    "AF3",
-		fabricPriority: 5,
+		desc:        "scheduler-policy-AF3",
+		sequence:    uint32(1),
+		priority:    oc.Scheduler_Priority_UNSET,
+		inputID:     "AF3",
+		inputType:   oc.Input_InputType_QUEUE,
+		weight:      uint64(16),
+		queueName:   queues.AF3,
+		targetGroup: "AF3",
 	}, {
-		desc:           "scheduler-policy-AF4",
-		sequence:       uint32(0),
-		priority:       oc.Scheduler_Priority_STRICT,
-		inputID:        "AF4",
-		inputType:      oc.Input_InputType_QUEUE,
-		weight:         uint64(99),
-		queueName:      queues.AF4,
-		targetGroup:    "AF4",
-		fabricPriority: 6,
+		desc:        "scheduler-policy-AF4",
+		sequence:    uint32(0),
+		priority:    oc.Scheduler_Priority_STRICT,
+		inputID:     "AF4",
+		inputType:   oc.Input_InputType_QUEUE,
+		weight:      uint64(99),
+		queueName:   queues.AF4,
+		targetGroup: "AF4",
 	}, {
-		desc:           "scheduler-policy-NC1",
-		sequence:       uint32(0),
-		priority:       oc.Scheduler_Priority_STRICT,
-		inputID:        "NC1",
-		inputType:      oc.Input_InputType_QUEUE,
-		weight:         uint64(100),
-		queueName:      queues.NC1,
-		targetGroup:    "NC1",
-		fabricPriority: 7,
+		desc:        "scheduler-policy-NC1",
+		sequence:    uint32(0),
+		priority:    oc.Scheduler_Priority_STRICT,
+		inputID:     "NC1",
+		inputType:   oc.Input_InputType_QUEUE,
+		weight:      uint64(100),
+		queueName:   queues.NC1,
+		targetGroup: "NC1",
 	}}
 
 	schedulerPolicy := q.GetOrCreateSchedulerPolicy("scheduler")
 	schedulerPolicy.SetName("scheduler")
 	t.Logf("qos scheduler policies config cases: %v", schedulers)
-	t.Logf("LC: qoscfg : %v", q)
 	for _, tc := range schedulers {
 		t.Run(tc.desc, func(t *testing.T) {
-			qoscfg.SetForwardingGroupWithFabricPriority(t, dut, q, tc.targetGroup, tc.queueName, tc.fabricPriority)
+			qoscfg.SetForwardingGroup(t, dut, q, tc.targetGroup, tc.queueName)
 			s := schedulerPolicy.GetOrCreateScheduler(tc.sequence)
 			s.SetSequence(tc.sequence)
 			s.SetPriority(tc.priority)
@@ -907,9 +851,7 @@ func testNokiaECNConfig(t *testing.T) {
 			input.SetId(tc.inputID)
 			input.SetInputType(tc.inputType)
 			input.SetQueue(tc.queueName)
-			if tc.priority != oc.Scheduler_Priority_STRICT {
-				input.SetWeight(tc.weight)
-			}
+			input.SetWeight(tc.weight)
 			gnmi.Replace(t, dut, gnmi.OC().Qos().Config(), q)
 		})
 	}
@@ -939,6 +881,7 @@ func testNokiaECNConfig(t *testing.T) {
 	uniform.SetMinThreshold(ecnConfig.minThreshold)
 	uniform.SetMaxThreshold(ecnConfig.maxThreshold)
 	uniform.SetMaxDropProbabilityPercent(ecnConfig.maxDropProbabilityPercent)
+	uniform.SetWeight(ecnConfig.weight)
 
 	t.Logf("qos ECN QueueManagementProfile config cases: %v", ecnConfig)
 	gnmi.Replace(t, dut, gnmi.OC().Qos().Config(), q)
@@ -949,28 +892,17 @@ func testNokiaECNConfig(t *testing.T) {
 	if got, want := gnmi.Get(t, dut, wredUniform.MaxDropProbabilityPercent().State()), ecnConfig.maxDropProbabilityPercent; got != want {
 		t.Errorf("wredUniform.MaxDropProbabilityPercent().State(): got %v, want %v", got, want)
 	}
-
-	if !deviations.StatePathsUnsupported(dut) {
-		if got, want := gnmi.Get(t, dut, wredUniform.MinThreshold().State()), ecnConfig.minThreshold; got != want {
-			t.Errorf("wredUniform.MinThreshold().State(): got %v, want %v", got, want)
-		}
-		if got, want := gnmi.Get(t, dut, wredUniform.MaxThreshold().State()), ecnConfig.maxThreshold; got != want {
-			t.Errorf("wredUniform.MaxThreshold().State(): got %v, want %v", got, want)
-		}
+	if got, want := gnmi.Get(t, dut, wredUniform.MinThreshold().State()), ecnConfig.minThreshold; got != want {
+		t.Errorf("wredUniform.MinThreshold().State(): got %v, want %v", got, want)
 	}
-
-	if !deviations.DropWeightLeavesUnsupported(dut) {
-
-		uniform.SetDrop(ecnConfig.dropEnabled)
-		uniform.SetWeight(ecnConfig.weight)
-		gnmi.Replace(t, dut, gnmi.OC().Qos().Config(), q)
-
-		if got, want := gnmi.Get(t, dut, wredUniform.Drop().State()), ecnConfig.dropEnabled; got != want {
-			t.Errorf("wredUniform.Drop().State(): got %v, want %v", got, want)
-		}
-		if got, want := gnmi.Get(t, dut, wredUniform.Weight().State()), ecnConfig.weight; got != want {
-			t.Errorf("wredUniform.Weight().State(): got %v, want %v", got, want)
-		}
+	if got, want := gnmi.Get(t, dut, wredUniform.MaxThreshold().State()), ecnConfig.maxThreshold; got != want {
+		t.Errorf("wredUniform.MaxThreshold().State(): got %v, want %v", got, want)
+	}
+	if got, want := gnmi.Get(t, dut, wredUniform.Drop().State()), ecnConfig.dropEnabled; got != want {
+		t.Errorf("wredUniform.Drop().State(): got %v, want %v", got, want)
+	}
+	if got, want := gnmi.Get(t, dut, wredUniform.Weight().State()), ecnConfig.weight; got != want {
+		t.Errorf("wredUniform.Weight().State(): got %v, want %v", got, want)
 	}
 
 	cases := []struct {
@@ -1015,6 +947,8 @@ func testNokiaECNConfig(t *testing.T) {
 		scheduler:   "scheduler",
 	}}
 
+	maxBurstSize := uint32(268435456)
+	bufferAllocation := q.GetOrCreateBufferAllocationProfile("ballocprofile")
 	t.Logf("qos output interface config cases: %v", cases)
 	for _, tc := range cases {
 		t.Run(tc.desc, func(t *testing.T) {
@@ -1024,22 +958,23 @@ func testNokiaECNConfig(t *testing.T) {
 			queue := output.GetOrCreateQueue(tc.targetGroup)
 			queue.SetQueueManagementProfile(tc.ecnProfile)
 			queue.SetName(tc.targetGroup)
+			bq := bufferAllocation.GetOrCreateQueue(tc.targetGroup)
+			bq.SetStaticSharedBufferLimit(maxBurstSize)
+			output.SetBufferAllocationProfile("ballocprofile")
 			gnmi.Replace(t, dut, gnmi.OC().Qos().Config(), q)
 		})
 
 		// Verify the policy is applied by checking the telemetry path state values.
 		policy := gnmi.OC().Qos().Interface(dp.Name()).Output().SchedulerPolicy()
 		outQueue := gnmi.OC().Qos().Interface(dp.Name()).Output().Queue(tc.targetGroup)
-		if !deviations.StatePathsUnsupported(dut) {
-			if got, want := gnmi.Get(t, dut, policy.Name().State()), tc.scheduler; got != want {
-				t.Errorf("policy.Name().State(): got %v, want %v", got, want)
-			}
-			if got, want := gnmi.Get(t, dut, outQueue.Name().State()), tc.targetGroup; got != want {
-				t.Errorf("outQueue.Name().State(): got %v, want %v", got, want)
-			}
-			if got, want := gnmi.Get(t, dut, outQueue.QueueManagementProfile().State()), tc.ecnProfile; got != want {
-				t.Errorf("outQueue.QueueManagementProfile().State(): got %v, want %v", got, want)
-			}
+		if got, want := gnmi.Get(t, dut, policy.Name().State()), tc.scheduler; got != want {
+			t.Errorf("policy.Name().State(): got %v, want %v", got, want)
+		}
+		if got, want := gnmi.Get(t, dut, outQueue.Name().State()), tc.targetGroup; got != want {
+			t.Errorf("outQueue.Name().State(): got %v, want %v", got, want)
+		}
+		if got, want := gnmi.Get(t, dut, outQueue.QueueManagementProfile().State()), tc.ecnProfile; got != want {
+			t.Errorf("outQueue.QueueManagementProfile().State(): got %v, want %v", got, want)
 		}
 		if got, want := gnmi.Get(t, dut, wredUniform.EnableEcn().State()), ecnConfig.ecnEnabled; got != want {
 			t.Errorf("wredUniform.EnableEcn().State(): got %v, want %v", got, want)

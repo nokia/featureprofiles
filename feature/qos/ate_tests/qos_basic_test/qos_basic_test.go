@@ -513,6 +513,14 @@ func ConfigureDUTIntf(t *testing.T, dut *ondatra.DUTDevice) {
 		a := s.GetOrCreateAddress(intf.ipAddr)
 		a.PrefixLength = ygot.Uint8(intf.prefixLen)
 		gnmi.Replace(t, dut, gnmi.OC().Interface(intf.intfName).Config(), i)
+		if deviations.ExplicitInterfaceInDefaultVRF(dut) {
+			fptest.AssignToNetworkInstance(t, dut, intf.intfName, deviations.DefaultNetworkInstance(dut), 0)
+		}
+	}
+	if deviations.ExplicitPortSpeed(dut) {
+		fptest.SetPortSpeed(t, dp1)
+		fptest.SetPortSpeed(t, dp2)
+		fptest.SetPortSpeed(t, dp3)
 	}
 }
 
@@ -525,56 +533,53 @@ func ConfigureQoS(t *testing.T, dut *ondatra.DUTDevice) {
 	q := d.GetOrCreateQos()
 	queues := netutil.CommonTrafficQueues(t, dut)
 
+	if dut.Vendor() == ondatra.NOKIA {
+		queueNames := []string{queues.NC1, queues.AF4, queues.AF3, queues.AF2, queues.AF1, queues.BE0, queues.BE1}
+		for i, queue := range queueNames {
+			q1 := q.GetOrCreateQueue(queue)
+			q1.Name = ygot.String(queue)
+			queueid := len(queueNames) - i
+			q1.QueueId = ygot.Uint8(uint8(queueid))
+		}
+	}
 	t.Logf("Create qos forwarding groups and queue name config")
 	forwardingGroups := []struct {
-		desc           string
-		queueName      string
-		fabricPriority uint8
-		targetGroup    string
+		desc        string
+		queueName   string
+		targetGroup string
 	}{{
-		desc:           "forwarding-group-BE1",
-		queueName:      queues.BE1,
-		fabricPriority: 1,
-		targetGroup:    "target-group-BE1",
+		desc:        "forwarding-group-BE1",
+		queueName:   queues.BE1,
+		targetGroup: "target-group-BE1",
 	}, {
-		desc:           "forwarding-group-BE0",
-		queueName:      queues.BE0,
-		fabricPriority: 2,
-		targetGroup:    "target-group-BE0",
+		desc:        "forwarding-group-BE0",
+		queueName:   queues.BE0,
+		targetGroup: "target-group-BE0",
 	}, {
-		desc:           "forwarding-group-AF1",
-		queueName:      queues.AF1,
-		fabricPriority: 3,
-		targetGroup:    "target-group-AF1",
+		desc:        "forwarding-group-AF1",
+		queueName:   queues.AF1,
+		targetGroup: "target-group-AF1",
 	}, {
-		desc:           "forwarding-group-AF2",
-		queueName:      queues.AF2,
-		fabricPriority: 4,
-		targetGroup:    "target-group-AF2",
+		desc:        "forwarding-group-AF2",
+		queueName:   queues.AF2,
+		targetGroup: "target-group-AF2",
 	}, {
-		desc:           "forwarding-group-AF3",
-		queueName:      queues.AF3,
-		fabricPriority: 5,
-		targetGroup:    "target-group-AF3",
+		desc:        "forwarding-group-AF3",
+		queueName:   queues.AF3,
+		targetGroup: "target-group-AF3",
 	}, {
-		desc:           "forwarding-group-AF4",
-		queueName:      queues.AF4,
-		fabricPriority: 6,
-		targetGroup:    "target-group-AF4",
+		desc:        "forwarding-group-AF4",
+		queueName:   queues.AF4,
+		targetGroup: "target-group-AF4",
 	}, {
-		desc:           "forwarding-group-NC1",
-		queueName:      queues.NC1,
-		fabricPriority: 7,
-		targetGroup:    "target-group-NC1",
+		desc:        "forwarding-group-NC1",
+		queueName:   queues.NC1,
+		targetGroup: "target-group-NC1",
 	}}
 
 	t.Logf("qos forwarding groups config: %v", forwardingGroups)
 	for _, tc := range forwardingGroups {
-		if dut.Vendor() == ondatra.NOKIA {
-			qoscfg.SetForwardingGroupWithFabricPriority(t, dut, q, tc.targetGroup, tc.queueName, tc.fabricPriority)
-		} else {
-			qoscfg.SetForwardingGroup(t, dut, q, tc.targetGroup, tc.queueName)
-		}
+		qoscfg.SetForwardingGroup(t, dut, q, tc.targetGroup, tc.queueName)
 	}
 
 	t.Logf("Create qos queue management profile config")
@@ -594,9 +599,6 @@ func ConfigureQoS(t *testing.T, dut *ondatra.DUTDevice) {
 	uniform := wred.GetOrCreateUniform()
 	uniform.SetEnableEcn(ecnConfig.ecnEnabled)
 	uniform.SetMinThreshold(ecnConfig.minThreshold)
-	if dut.Vendor() == ondatra.NOKIA {
-		uniform.SetDrop(false)
-	}
 	gnmi.Replace(t, dut, gnmi.OC().Qos().Config(), q)
 
 	t.Logf("Create qos Classifiers config")
@@ -726,7 +728,7 @@ func ConfigureQoS(t *testing.T, dut *ondatra.DUTDevice) {
 		} else if tc.name == "dscp_based_classifier_ipv6" {
 			condition.GetOrCreateIpv6().SetDscpSet(tc.dscpSet)
 		}
-		// LC gnmi.Replace(t, dut, gnmi.OC().Qos().Config(), q)
+		gnmi.Replace(t, dut, gnmi.OC().Qos().Config(), q)
 	}
 
 	t.Logf("Create qos input classifier config")
@@ -908,20 +910,24 @@ func ConfigureQoS(t *testing.T, dut *ondatra.DUTDevice) {
 		ecnProfile: "ECNProfile",
 	}}
 
+	maxBurstSize := uint32(268435456)
 	t.Logf("qos output interface config: %v", schedulerIntfs)
 	for _, tc := range schedulerIntfs {
 		i := q.GetOrCreateInterface(dp3.Name())
 		i.SetInterfaceId(dp3.Name())
 		i.GetOrCreateInterfaceRef().Interface = ygot.String(dp3.Name())
-		if deviations.InterfaceRefConfigUnsupported(dut) {
-			i.InterfaceRef = nil
-		}
 		output := i.GetOrCreateOutput()
 		schedulerPolicy := output.GetOrCreateSchedulerPolicy()
 		schedulerPolicy.SetName(tc.scheduler)
 		queue := output.GetOrCreateQueue(tc.queueName)
 		queue.SetName(tc.queueName)
 		queue.SetQueueManagementProfile(tc.ecnProfile)
+		if dut.Vendor() == ondatra.NOKIA {
+			bufferAllocation := q.GetOrCreateBufferAllocationProfile("ballocprofile")
+			bq := bufferAllocation.GetOrCreateQueue(tc.queueName)
+			bq.SetStaticSharedBufferLimit(maxBurstSize)
+			output.SetBufferAllocationProfile("ballocprofile")
+		}
 		gnmi.Replace(t, dut, gnmi.OC().Qos().Config(), q)
 	}
 }
@@ -1095,26 +1101,24 @@ func ConfigureCiscoQos(t *testing.T, dut *ondatra.DUTDevice) {
 	t.Logf("qos Classifiers config cases: %v", cases)
 	for _, tc := range cases {
 		t.Run(tc.desc, func(t *testing.T) {
-			/*
-				classifier := q.GetOrCreateClassifier(tc.name)
-				classifier.SetName(tc.name)
-				classifier.SetType(tc.classType)
-				term, err := classifier.NewTerm(tc.termID)
-				if err != nil {
-					t.Fatalf("Failed to create classifier.NewTerm(): %v", err)
-				}
+			classifier := q.GetOrCreateClassifier(tc.name)
+			classifier.SetName(tc.name)
+			classifier.SetType(tc.classType)
+			term, err := classifier.NewTerm(tc.termID)
+			if err != nil {
+				t.Fatalf("Failed to create classifier.NewTerm(): %v", err)
+			}
 
-				term.SetId(tc.termID)
-				action := term.GetOrCreateActions()
-				action.SetTargetGroup(tc.targetGroup)
-				condition := term.GetOrCreateConditions()
-				if tc.classType == oc.Qos_Classifier_Type_IPV4 {
-					condition.GetOrCreateIpv4().SetDscpSet(tc.dscpSet)
-				} else if tc.classType == oc.Qos_Classifier_Type_IPV6 {
-					condition.GetOrCreateIpv6().SetDscpSet(tc.dscpSet)
-				}
-				gnmi.Replace(t, dut, gnmi.OC().Qos().Config(), q)
-			*/
+			term.SetId(tc.termID)
+			action := term.GetOrCreateActions()
+			action.SetTargetGroup(tc.targetGroup)
+			condition := term.GetOrCreateConditions()
+			if tc.classType == oc.Qos_Classifier_Type_IPV4 {
+				condition.GetOrCreateIpv4().SetDscpSet(tc.dscpSet)
+			} else if tc.classType == oc.Qos_Classifier_Type_IPV6 {
+				condition.GetOrCreateIpv6().SetDscpSet(tc.dscpSet)
+			}
+			gnmi.Replace(t, dut, gnmi.OC().Qos().Config(), q)
 		})
 	}
 
@@ -1149,8 +1153,7 @@ func ConfigureCiscoQos(t *testing.T, dut *ondatra.DUTDevice) {
 
 	t.Logf("qos input classifier config: %v", classifierIntfs)
 	for _, tc := range classifierIntfs {
-		t.Logf("LC: skipping config for : %v", tc)
-		// qoscfg.SetInputClassifier(t, dut, q, tc.intf, tc.inputClassifierType, tc.classifier)
+		qoscfg.SetInputClassifier(t, dut, q, tc.intf, tc.inputClassifierType, tc.classifier)
 	}
 
 	t.Logf("Create qos scheduler policies config")
@@ -1486,7 +1489,7 @@ func ConfigureJuniperQos(t *testing.T, dut *ondatra.DUTDevice) {
 		} else if tc.name == "dscp_based_classifier_ipv6" {
 			condition.GetOrCreateIpv6().SetDscpSet(tc.dscpSet)
 		}
-		// LC gnmi.Replace(t, dut, gnmi.OC().Qos().Config(), q)
+		gnmi.Replace(t, dut, gnmi.OC().Qos().Config(), q)
 	}
 
 	t.Logf("Create qos input classifier config")
