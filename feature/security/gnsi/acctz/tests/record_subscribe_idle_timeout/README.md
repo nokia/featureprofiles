@@ -1,4 +1,4 @@
-# ACCTZ-5.1 - gNSI.acctz.v1 (Accounting) Test RecordSubscribe Idle Timeout - client becomes silent
+# ACCTZ-5.1: Record Subscribe Idle Timeout
 
 ## Summary
 Test RecordSubscribe connection termination after idle timeout following 1 RecordSubscribe RPC and 1 idle timeout refresh RPC

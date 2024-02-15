@@ -1,0 +1,8 @@
+# proto-file: github.com/openconfig/featureprofiles/proto/metadata.proto
+# proto-message: Metadata
+
+uuid:  "3e8272b0-debe-44a4-b9fb-2917dc1c1632"
+plan_id:  "ACCTZ-5.1"
+description:  "Record Subscribe Idle Timeout"
+testbed:  TESTBED_DUT
+platform_exceptions:  {}
