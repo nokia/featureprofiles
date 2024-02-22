@@ -1,0 +1,24 @@
+# proto-file: github.com/openconfig/featureprofiles/proto/metadata.proto
+# proto-message: Metadata
+
+uuid:  ""
+plan_id:  "RT-9"
+description:  "Weighted-ECMP for IS-IS"
+testbed:  TESTBED_DUT_ATE_9LINKS_LAG
+platform_exceptions: {
+  platform: {
+    vendor: NOKIA
+  }
+  deviations: {
+    explicit_port_speed: true
+    explicit_interface_in_default_vrf: true
+    aggregate_atomic_update: true
+    interface_enabled: true
+
+    isis_multi_topology_unsupported: true
+    isis_interface_level1_disable_required: true
+    missing_isis_interface_afi_safi_enable: true
+    isis_restart_suppress_unsupported: true
+    missing_value_for_defaults: true
+  }
+}
