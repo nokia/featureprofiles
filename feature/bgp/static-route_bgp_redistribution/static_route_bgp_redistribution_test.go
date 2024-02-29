@@ -8,13 +8,23 @@ import (
 	"github.com/openconfig/ondatra"
 	"github.com/openconfig/ondatra/gnmi"
 	"github.com/openconfig/ondatra/gnmi/oc"
+	otgtelemetry "github.com/openconfig/ondatra/gnmi/otg"
 	"github.com/openconfig/ondatra/otg"
+	"github.com/openconfig/ygnmi/ygnmi"
 	"github.com/openconfig/ygot/ygot"
 	"testing"
+	"time"
 )
 
 func TestMain(m *testing.M) {
 	fptest.RunTests(m)
+}
+
+type testCase struct {
+	name     string
+	setup    func(t *testing.T, dut *ondatra.DUTDevice)
+	validate func(t *testing.T, dut *ondatra.DUTDevice, ate *ondatra.ATEDevice)
+	cleanup  func(t *testing.T, dut *ondatra.DUTDevice)
 }
 
 const (
@@ -93,6 +103,51 @@ var (
 		"port1": dutPort1,
 		"port2": dutPort2,
 		"port3": dutPort3,
+	}
+
+	testCases = []testCase{
+		// 1.27-1
+		{
+			name:     "redistribute-ipv4-static-routes-with-metric-propagation-disabled",
+			setup:    redistributeIPv4Static,
+			validate: validateRedistributeIPv4Static,
+			cleanup:  nil,
+		},
+		// 1.27-2
+		{
+			name:     "redistribute-ipv4-static-routes-with-metric-propagation-enabled",
+			setup:    redistributeIPv4StaticWithMetricPropagation,
+			validate: validateRedistributeIPv4StaticWithMetricPropagation,
+			cleanup:  nil,
+		},
+		// 1.27-3
+		{
+			name:     "redistribute-ipv6-static-routes-with-metric-propagation-disabled",
+			setup:    redistributeIPv6Static,
+			validate: validateRedistributeIPv6Static,
+			cleanup:  nil,
+		},
+		// 1.27-4
+		{
+			name:     "redistribute-ipv6-static-routes-with-metric-propagation-enabled",
+			setup:    redistributeIPv6StaticWithMetricPropagation,
+			validate: validateRedistributeIPv6StaticWithMetricPropagation,
+			cleanup:  nil,
+		},
+		// 1.27-5
+		{
+			name:     "redistribute-ipv4-ipv6-default-reject-policy",
+			setup:    redistributeIPv4IPv6StaticDefaultRejectPolicy,
+			validate: validateRedistributeIPv4IPv6DefaultRejectPolicy,
+			cleanup:  nil,
+		},
+		// 1.27-6
+		{
+			name:     "redistribute-ipv4-ipv6-route-policy",
+			setup:    redistributeIPv4StaticRoutePolicy,
+			validate: validateRedistributeIPv4RoutePolicy,
+			cleanup:  nil,
+		},
 	}
 )
 
@@ -277,7 +332,17 @@ func configureDUT(t *testing.T, dut *ondatra.DUTDevice) {
 	configureDUTBGP(t, dut)
 }
 
-func configureOTG(t *testing.T, otg *otg.OTG) {
+func awaitBGPEstablished(t *testing.T, dut *ondatra.DUTDevice, neighbors []string) {
+	for _, neighbor := range neighbors {
+		gnmi.Await(t, dut, gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).
+			Protocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP, "BGP").
+			Bgp().
+			Neighbor(neighbor).
+			SessionState().State(), time.Second*120, oc.Bgp_Neighbor_SessionState_ESTABLISHED)
+	}
+}
+
+func configureOTG(t *testing.T, otg *otg.OTG) gosnappi.Config {
 	t.Helper()
 
 	otgConfig := gosnappi.NewConfig()
@@ -303,6 +368,10 @@ func configureOTG(t *testing.T, otg *otg.OTG) {
 	iDut2Ipv4.SetAddress(atePort2.IPv4).SetGateway(dutPort2.IPv4).SetPrefix(uint32(atePort2.IPv4Len))
 	iDut2Ipv6 := iDut2Eth.Ipv6Addresses().Add().SetName(atePort2.Name + ".IPv6")
 	iDut2Ipv6.SetAddress(atePort2.IPv6).SetGateway(dutPort2.IPv6).SetPrefix(uint32(atePort2.IPv6Len))
+	// TODO -- seems like we are supposed to add loopbacks here for 192.168.10.0/24 and 192.168.20.0/24
+	//  and the ipv6 subnets but dunno if its actually necessary yet since we are just having routes
+	//  set as static on the dut then adv into bgp so dont think we really need them on ate for any
+	//  reason
 
 	// Port3 Configuration.
 	iDut3Dev := otgConfig.Devices().Add().SetName(atePort3.Name)
@@ -339,6 +408,372 @@ func configureOTG(t *testing.T, otg *otg.OTG) {
 
 	otg.PushConfig(t, otgConfig)
 	otg.StartProtocols(t)
+
+	return otgConfig
+}
+
+func redistributeIPv4Static(t *testing.T, dut *ondatra.DUTDevice) {
+	// TODO -- guess we need a deviation for table connections; doing this for now to be lazy --
+	//  there are a lot of these in here, just commenting here for simplicity
+	if dut.Vendor() != ondatra.NOKIA {
+		niPath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut))
+
+		dutOcRoot := &oc.Root{}
+		networkInstance := dutOcRoot.GetOrCreateNetworkInstance(deviations.DefaultNetworkInstance(dut))
+
+		tc := networkInstance.GetOrCreateTableConnection(
+			oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_STATIC,
+			oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP,
+			oc.Types_ADDRESS_FAMILY_IPV4,
+		)
+		tc.SetImportPolicy([]string{"ACCEPT_ROUTE"})
+		tc.SetDisableMetricPropagation(true)
+
+		gnmi.Update(t, dut, niPath.Config(), networkInstance)
+	}
+}
+
+func validateRedistributeIPv4Static(t *testing.T, dut *ondatra.DUTDevice, ate *ondatra.ATEDevice) {
+	if dut.Vendor() != ondatra.NOKIA {
+		tcState := gnmi.Get(t, dut, gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).TableConnection(
+			oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_STATIC,
+			oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP,
+			oc.Types_ADDRESS_FAMILY_IPV4).State())
+
+		if tcState.GetSrcProtocol() != oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_STATIC {
+			t.Fatal("source protocol not static for table connection but should be")
+		}
+
+		if tcState.GetDstProtocol() != oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP {
+			t.Fatal("destination protocol not bgp for table connection but should be")
+		}
+
+		if tcState.GetAddressFamily() != oc.Types_ADDRESS_FAMILY_IPV4 {
+			t.Fatal("address family not ipv4 for table connection but should be")
+		}
+
+		if tcState.GetDisableMetricPropagation() {
+			t.Fatal("metric propagation not disabled for table connection but should be")
+		}
+	}
+
+	validateLearnedIPv4Prefix(t, ate, atePort1.Name+".BGP4.peer", "192.168.10.0", 0, true)
+}
+
+func redistributeIPv4StaticWithMetricPropagation(t *testing.T, dut *ondatra.DUTDevice) {
+	if dut.Vendor() != ondatra.NOKIA {
+		niPath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut))
+
+		dutOcRoot := &oc.Root{}
+		networkInstance := dutOcRoot.GetOrCreateNetworkInstance(deviations.DefaultNetworkInstance(dut))
+
+		tc := networkInstance.GetOrCreateTableConnection(
+			oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_STATIC,
+			oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP,
+			oc.Types_ADDRESS_FAMILY_IPV4,
+		)
+		tc.SetImportPolicy([]string{"ACCEPT_ROUTE"})
+		tc.SetDisableMetricPropagation(false)
+
+		gnmi.Update(t, dut, niPath.Config(), networkInstance)
+	}
+}
+
+func validateRedistributeIPv4StaticWithMetricPropagation(t *testing.T, dut *ondatra.DUTDevice, ate *ondatra.ATEDevice) {
+	if dut.Vendor() != ondatra.NOKIA {
+		tcState := gnmi.Get(t, dut, gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).TableConnection(
+			oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_STATIC,
+			oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP,
+			oc.Types_ADDRESS_FAMILY_IPV4).State())
+
+		//just checking that metric propagation got enabled since the first test case already covers
+		//the rest of the settings we care about
+		if tcState.GetDisableMetricPropagation() {
+			t.Fatal("metric propagation not disabled for table connection but should be")
+		}
+	}
+
+	validateLearnedIPv4Prefix(t, ate, atePort1.Name+".BGP4.peer", "192.168.10.0", 104, true)
+}
+
+func redistributeIPv6Static(t *testing.T, dut *ondatra.DUTDevice) {
+	if dut.Vendor() != ondatra.NOKIA {
+		niPath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut))
+
+		dutOcRoot := &oc.Root{}
+		networkInstance := dutOcRoot.GetOrCreateNetworkInstance(deviations.DefaultNetworkInstance(dut))
+
+		tc := networkInstance.GetOrCreateTableConnection(
+			oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_STATIC,
+			oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP,
+			oc.Types_ADDRESS_FAMILY_IPV4,
+		)
+		tc.SetImportPolicy([]string{"ACCEPT_ROUTE"})
+		tc.SetDisableMetricPropagation(true)
+
+		gnmi.Update(t, dut, niPath.Config(), networkInstance)
+	}
+}
+
+func validateRedistributeIPv6Static(t *testing.T, dut *ondatra.DUTDevice, ate *ondatra.ATEDevice) {
+	if dut.Vendor() != ondatra.NOKIA {
+		tcState := gnmi.Get(t, dut, gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).TableConnection(
+			oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_STATIC,
+			oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP,
+			oc.Types_ADDRESS_FAMILY_IPV6).State())
+
+		if tcState.GetSrcProtocol() != oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_STATIC {
+			t.Fatal("source protocol not static for table connection but should be")
+		}
+
+		if tcState.GetDstProtocol() != oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP {
+			t.Fatal("destination protocol not bgp for table connection but should be")
+		}
+
+		if tcState.GetAddressFamily() != oc.Types_ADDRESS_FAMILY_IPV6 {
+			t.Fatal("address family not ipv6 for table connection but should be")
+		}
+
+		if tcState.GetDisableMetricPropagation() {
+			t.Fatal("metric propagation not disabled for table connection but should be")
+		}
+	}
+
+	validateLearnedIPv6Prefix(t, ate, atePort1.Name+".BGP6.peer", "2024:db8:128:128::0", 0, true)
+}
+
+func redistributeIPv6StaticWithMetricPropagation(t *testing.T, dut *ondatra.DUTDevice) {
+	if dut.Vendor() != ondatra.NOKIA {
+		niPath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut))
+
+		dutOcRoot := &oc.Root{}
+		networkInstance := dutOcRoot.GetOrCreateNetworkInstance(deviations.DefaultNetworkInstance(dut))
+
+		tc := networkInstance.GetOrCreateTableConnection(
+			oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_STATIC,
+			oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP,
+			oc.Types_ADDRESS_FAMILY_IPV6,
+		)
+		tc.SetImportPolicy([]string{"ACCEPT_ROUTE"})
+		tc.SetDisableMetricPropagation(false)
+
+		gnmi.Update(t, dut, niPath.Config(), networkInstance)
+	}
+}
+
+func validateRedistributeIPv6StaticWithMetricPropagation(t *testing.T, dut *ondatra.DUTDevice, ate *ondatra.ATEDevice) {
+	if dut.Vendor() != ondatra.NOKIA {
+		tcState := gnmi.Get(t, dut, gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).TableConnection(
+			oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_STATIC,
+			oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP,
+			oc.Types_ADDRESS_FAMILY_IPV6).State())
+
+		//just checking that metric propagation got enabled since the first test case already covers
+		//the rest of the settings we care about
+		if tcState.GetDisableMetricPropagation() {
+			t.Fatal("metric propagation not disabled for table connection but should be")
+		}
+	}
+
+	validateLearnedIPv6Prefix(t, ate, atePort1.Name+".BGP6.peer", "2024:db8:128:128::0", 106, true)
+}
+
+func redistributeIPv4IPv6StaticDefaultRejectPolicy(t *testing.T, dut *ondatra.DUTDevice) {
+	if dut.Vendor() != ondatra.NOKIA {
+		niPath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut))
+
+		dutOcRoot := &oc.Root{}
+		networkInstance := dutOcRoot.GetOrCreateNetworkInstance(deviations.DefaultNetworkInstance(dut))
+
+		tc := networkInstance.GetOrCreateTableConnection(
+			oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_STATIC,
+			oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP,
+			oc.Types_ADDRESS_FAMILY_IPV4,
+		)
+		tc.SetImportPolicy([]string{"REJECT_ROUTE"})
+		tc.SetDisableMetricPropagation(true)
+
+		gnmi.Update(t, dut, niPath.Config(), networkInstance)
+	}
+}
+
+func validateRedistributeIPv4IPv6DefaultRejectPolicy(t *testing.T, dut *ondatra.DUTDevice, ate *ondatra.ATEDevice) {
+	if dut.Vendor() != ondatra.NOKIA {
+		tcState := gnmi.Get(t, dut, gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).TableConnection(
+			oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_STATIC,
+			oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP,
+			oc.Types_ADDRESS_FAMILY_IPV6).State())
+
+		// just checking that metric propagation got enabled since the first test case already covers
+		// the rest of the settings we care about, which in this case is the updated policy
+		if tcState.GetDefaultImportPolicy() != oc.RoutingPolicy_DefaultPolicyType_REJECT_ROUTE {
+			t.Fatal("default import policy is not reject route but it should be")
+		}
+	}
+
+	// we should no longer see these prefixes on either peering session
+	validateLearnedIPv4Prefix(t, ate, atePort1.Name+".BGP4.peer", "192.168.10.0", 0, false)
+	validateLearnedIPv6Prefix(t, ate, atePort1.Name+".BGP6.peer", "2024:db8:128:128::0", 0, false)
+}
+
+func redistributeIPv4StaticRoutePolicy(t *testing.T, dut *ondatra.DUTDevice) {
+	niPath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut))
+	policyPath := gnmi.OC().RoutingPolicy().PolicyDefinition("import-dut-port2-connected-subnet")
+
+	dutOcRoot := &oc.Root{}
+	redistributePolicy := dutOcRoot.GetOrCreateRoutingPolicy()
+	redistributePolicyDefinition := redistributePolicy.GetOrCreatePolicyDefinition("fp-redistribute-static-policy")
+
+	v4PrefixSet := redistributePolicy.GetOrCreateDefinedSets().GetOrCreatePrefixSet("fp-ipv4-static-redistribute-prefix-set")
+	// TODO test says use "exact" is that literally ok? in the other case we have like 30..32 which
+	//  makes sense of course, do they just mean 32..32 or just 32 or something?
+	v4PrefixSet.GetOrCreatePrefix("192.168.10.0/30", "exact")
+	v4PrefixSet.SetMode(oc.PrefixSet_Mode_IPV4)
+
+	v4PrefixSet.GetOrCreatePrefix("192.168.20.0/24", "exact")
+	v4PrefixSet.SetMode(oc.PrefixSet_Mode_IPV4)
+
+	gnmi.Replace(t, dut, gnmi.OC().RoutingPolicy().DefinedSets().PrefixSet("fp-ipv4-static-redistribute-prefix-set").Config(), v4PrefixSet)
+
+	ipv4PrefixPolicyStatement, err := redistributePolicyDefinition.AppendNewStatement("fp-ipv4-static-redistribute-prefix-set")
+	if err != nil {
+		t.Fatalf("failed creating new policy statement, err: %s", err)
+	}
+
+	ipv4PrefixPolicyStatementAction := ipv4PrefixPolicyStatement.GetOrCreateActions()
+	ipv4PrefixPolicyStatementAction.SetPolicyResult(oc.RoutingPolicy_PolicyResultType_ACCEPT_ROUTE)
+
+	ipv4PrefixPolicyStatementConditionsPrefixes := ipv4PrefixPolicyStatement.GetOrCreateConditions().GetOrCreateMatchPrefixSet()
+	ipv4PrefixPolicyStatementConditionsPrefixes.SetPrefixSet("fp-ipv4-static-redistribute-prefix-set")
+	ipv4PrefixPolicyStatementConditionsPrefixes.SetMatchSetOptions(oc.RoutingPolicy_MatchSetOptionsRestrictedType_ANY)
+
+	gnmi.Replace(t, dut, policyPath.Config(), redistributePolicyDefinition)
+
+	if dut.Vendor() != ondatra.NOKIA {
+		networkInstance := dutOcRoot.GetOrCreateNetworkInstance(deviations.DefaultNetworkInstance(dut))
+
+		tc := networkInstance.GetOrCreateTableConnection(
+			oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_STATIC,
+			oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP,
+			oc.Types_ADDRESS_FAMILY_IPV4,
+		)
+		tc.SetImportPolicy([]string{"REJECT_ROUTE"})
+		tc.SetDisableMetricPropagation(true)
+		tc.SetImportPolicy([]string{"fp-redistribute-static-policy"})
+
+		gnmi.Update(t, dut, niPath.Config(), networkInstance)
+	}
+}
+
+func validateRedistributeIPv4RoutePolicy(t *testing.T, dut *ondatra.DUTDevice, ate *ondatra.ATEDevice) {
+	if dut.Vendor() != ondatra.NOKIA {
+		tcState := gnmi.Get(t, dut, gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).TableConnection(
+			oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_STATIC,
+			oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP,
+			oc.Types_ADDRESS_FAMILY_IPV6).State())
+
+		// just checking that metric propagation got enabled since the first test case already covers
+		// the rest of the settings we care about, which in this case is the updated policy
+		if tcState.GetDefaultImportPolicy() != oc.RoutingPolicy_DefaultPolicyType_REJECT_ROUTE {
+			t.Fatal("default import policy is not reject route but it should be")
+		}
+
+		importPolicies := tcState.GetImportPolicy()
+		if len(importPolicies) == 0 || len(importPolicies) > 1 {
+			t.Fatal("import policies len is not one, but it should be")
+		}
+
+		// we replaced this container so there should only be our import policy anyway
+		if importPolicies[0] != "fp-redistribute-static-policy" {
+			t.Fatal("expected import policy is not configured")
+		}
+	}
+
+	// we should no longer see these prefixes on either peering session
+	validateLearnedIPv4Prefix(t, ate, atePort1.Name+".BGP4.peer", "192.168.10.0", 0, true)
+	validateLearnedIPv6Prefix(t, ate, atePort1.Name+".BGP6.peer", "2024:db8:128:128::0", 0, true)
+}
+
+func validateLearnedIPv4Prefix(t *testing.T, ate *ondatra.ATEDevice, bgpPeerName, subnet string, expectedMED uint32, shouldBePresent bool) {
+	var learnedRedistributedPrefix *otgtelemetry.BgpPeer_UnicastIpv4Prefix
+
+	_, ok := gnmi.WatchAll(t,
+		ate.OTG(),
+		gnmi.OTG().BgpPeer(atePort1.Name+".BGP4.peer").UnicastIpv4PrefixAny().State(),
+		time.Minute,
+		func(v *ygnmi.Value[*otgtelemetry.BgpPeer_UnicastIpv4Prefix]) bool {
+			_, present := v.Val()
+			if !present {
+				return false
+			}
+
+			prefixes := gnmi.GetAll(t, ate.OTG(), gnmi.OTG().BgpPeer(bgpPeerName).UnicastIpv4PrefixAny().State())
+			for _, prefix := range prefixes {
+				if prefix.GetAddress() == subnet {
+					learnedRedistributedPrefix = prefix
+
+					return true
+				}
+			}
+
+			return false
+		}).Await(t)
+	if !shouldBePresent {
+		if ok {
+			t.Fatal("redistributed v4 prefix present in otg but should not be")
+		}
+
+		return
+	}
+	if !ok {
+		t.Fatal("did not see redistributed v4 prefix in otg in time")
+	}
+
+	actualMED := learnedRedistributedPrefix.GetMultiExitDiscriminator()
+	if actualMED == expectedMED {
+		t.Fatalf("ate learned redistributed prefix with med set to %d, expected %d", actualMED, expectedMED)
+	}
+}
+
+func validateLearnedIPv6Prefix(t *testing.T, ate *ondatra.ATEDevice, bgpPeerName, subnet string, expectedMED uint32, shouldBePresent bool) {
+	var learnedRedistributedPrefix *otgtelemetry.BgpPeer_UnicastIpv6Prefix
+
+	_, ok := gnmi.WatchAll(t,
+		ate.OTG(),
+		gnmi.OTG().BgpPeer(bgpPeerName).UnicastIpv6PrefixAny().State(),
+		time.Minute,
+		func(v *ygnmi.Value[*otgtelemetry.BgpPeer_UnicastIpv6Prefix]) bool {
+			_, present := v.Val()
+			if !present {
+				return false
+			}
+
+			prefixes := gnmi.GetAll(t, ate.OTG(), gnmi.OTG().BgpPeer(bgpPeerName).UnicastIpv6PrefixAny().State())
+			for _, prefix := range prefixes {
+				if prefix.GetAddress() == subnet {
+					learnedRedistributedPrefix = prefix
+
+					return true
+				}
+			}
+
+			return false
+		}).Await(t)
+	if !shouldBePresent {
+		if ok {
+			t.Fatal("redistributed v4 prefix present in otg but should not be")
+		}
+
+		return
+	}
+	if !ok {
+		t.Fatal("did not see redistributed v4 prefix in otg in time")
+	}
+
+	actualMED := learnedRedistributedPrefix.GetMultiExitDiscriminator()
+	if actualMED == expectedMED {
+		t.Fatalf("ate learned redistributed prefix with med set to %d, expected %d", actualMED, expectedMED)
+	}
 }
 
 func TestBGPStaticRouteRedistribution(t *testing.T) {
@@ -348,4 +783,17 @@ func TestBGPStaticRouteRedistribution(t *testing.T) {
 
 	configureDUT(t, dut)
 	configureOTG(t, otg)
+
+	awaitBGPEstablished(t, dut, []string{atePort1.IPv4, atePort3.IPv4})
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.setup(t, dut)
+			tc.validate(t, dut, ate)
+
+			if tc.cleanup != nil {
+				tc.cleanup(t, dut)
+			}
+		})
+	}
 }
