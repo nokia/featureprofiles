@@ -1,6 +1,7 @@
 package static_route_bgp_redistribution_test
 
 import (
+	"fmt"
 	"reflect"
 	"testing"
 	"time"
@@ -174,6 +175,13 @@ var (
 			name:     "redistribute-ipv4-route-policy-local-preference",
 			setup:    redistributeIPv4StaticRoutePolicyWithLocalPreference,
 			validate: validateIPv4RouteWithLocalPreference,
+			cleanup:  nil,
+		},
+		// 1.27-10
+		{
+			name:     "redistribute-ipv4-route-policy-community-set",
+			setup:    redistributeIPv4StaticRoutePolicyWithCommunitySet,
+			validate: validateIPv4RouteWithCommunitySet,
 			cleanup:  nil,
 		},
 	}
@@ -875,6 +883,68 @@ func redistributeIPv4StaticRoutePolicyWithLocalPreference(t *testing.T, dut *ond
 	}
 }
 
+func redistributeIPv4StaticRoutePolicyWithCommunitySet(t *testing.T, dut *ondatra.DUTDevice) {
+	niPath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut))
+	policyPath := gnmi.OC().RoutingPolicy().PolicyDefinition(redistributeStaticPolicy)
+	communityPath := gnmi.OC().RoutingPolicy().DefinedSets().BgpDefinedSets().CommunitySet("community-set-v4")
+
+	dutOcRoot := &oc.Root{}
+	redistributePolicy := dutOcRoot.GetOrCreateRoutingPolicy()
+	redistributePolicyDefinition := redistributePolicy.GetOrCreatePolicyDefinition(redistributeStaticPolicy)
+
+	communitySet := dutOcRoot.GetOrCreateRoutingPolicy()
+	communitySetPolicyDefinition := communitySet.GetOrCreateDefinedSets().GetOrCreateBgpDefinedSets().GetOrCreateCommunitySet("community-set-v4")
+	communitySetPolicyDefinition.SetCommunityMember([]oc.RoutingPolicy_DefinedSets_BgpDefinedSets_CommunitySet_CommunityMember_Union{oc.UnionString("64512:100")})
+
+	gnmi.Replace(t, dut, policyPath.Config(), redistributePolicyDefinition)
+	gnmi.Replace(t, dut, communityPath.Config(), communitySetPolicyDefinition)
+
+	if dut.Vendor() == ondatra.NOKIA {
+		redistributeStatic, err := redistributePolicyDefinition.AppendNewStatement("redistribute-static")
+		if err != nil {
+			t.Fatalf("failed creating new policy statement, err: %s", err)
+		}
+		redistributeStatic.GetOrCreateConditions().SetInstallProtocolEq(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_STATIC)
+		redistributeStatic.GetOrCreateActions().PolicyResult = oc.RoutingPolicy_PolicyResultType_ACCEPT_ROUTE
+		redistributeStatic.GetOrCreateActions().GetOrCreateBgpActions().SetSetRouteOrigin(oc.E_BgpPolicy_BgpOriginAttrType(oc.BgpPolicy_BgpOriginAttrType_IGP))
+
+		redistributeStatic.GetOrCreateActions().GetOrCreateBgpActions().GetOrCreateSetCommunity().SetOptions(oc.BgpPolicy_BgpSetCommunityOptionType_ADD)
+		redistributeStatic.GetOrCreateActions().GetOrCreateBgpActions().GetOrCreateSetCommunity().GetOrCreateReference().SetCommunitySetRef("community-set-v4")
+	}
+
+	ipv4PrefixPolicyStatement, err := redistributePolicyDefinition.AppendNewStatement("statement-v4")
+	if err != nil {
+		t.Fatalf("failed creating new policy statement, err: %s", err)
+	}
+
+	ipv4PrefixPolicyStatementAction := ipv4PrefixPolicyStatement.GetOrCreateActions()
+	ipv4PrefixPolicyStatementAction.SetPolicyResult(oc.RoutingPolicy_PolicyResultType_ACCEPT_ROUTE)
+	ipv4PrefixPolicyStatementAction.GetOrCreateBgpActions().GetOrCreateSetCommunity().SetOptions(oc.BgpPolicy_BgpSetCommunityOptionType_ADD)
+	ipv4PrefixPolicyStatementAction.GetOrCreateBgpActions().GetOrCreateSetCommunity().GetOrCreateReference().SetCommunitySetRef("community-set-v4")
+
+	gnmi.Replace(t, dut, policyPath.Config(), redistributePolicyDefinition)
+
+	if dut.Vendor() != ondatra.NOKIA {
+		networkInstance := dutOcRoot.GetOrCreateNetworkInstance(deviations.DefaultNetworkInstance(dut))
+
+		tc := networkInstance.GetOrCreateTableConnection(
+			oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_STATIC,
+			oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP,
+			oc.Types_ADDRESS_FAMILY_IPV4,
+		)
+		tc.SetImportPolicy([]string{"REJECT_ROUTE"})
+		tc.SetDisableMetricPropagation(true)
+		tc.SetImportPolicy([]string{redistributeStaticPolicy})
+
+		gnmi.Update(t, dut, niPath.Config(), networkInstance)
+	} else {
+
+		bgpPath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).Protocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP, "BGP").Bgp().Neighbor(atePort3.IPv4).AfiSafi(oc.BgpTypes_AFI_SAFI_TYPE_IPV4_UNICAST).ApplyPolicy().ExportPolicy()
+		gnmi.Replace(t, dut, bgpPath.Config(), []string{redistributeStaticPolicy})
+		// redistributeNokiaStatic(t, dut, isV4, !acceptRoute, metricPropagate)
+	}
+}
+
 func validateRedistributeIPv4RoutePolicy(t *testing.T, dut *ondatra.DUTDevice, ate *ondatra.ATEDevice) {
 	if dut.Vendor() != ondatra.NOKIA {
 		tcState := gnmi.Get(t, dut, gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).TableConnection(
@@ -916,6 +986,10 @@ func validateIPv4RouteWithLocalPreference(t *testing.T, dut *ondatra.DUTDevice, 
 	validateIPv4PrefixLocalPreference(t, ate, atePort3.Name+".BGP4.peer", "192.168.10.0", 100)
 }
 
+func validateIPv4RouteWithCommunitySet(t *testing.T, dut *ondatra.DUTDevice, ate *ondatra.ATEDevice) {
+	validateIPv4PrefixCommunitySet(t, ate, atePort3.Name+".BGP4.peer", "192.168.10.0", "64512:100")
+}
+
 func validateIPv4PrefixASN(t *testing.T, ate *ondatra.ATEDevice, bgpPeerName, subnet string, wantASPath []uint32) {
 
 	// t.Logf("LC: Sleeping 1min for Pause")
@@ -953,6 +1027,34 @@ func validateIPv4PrefixLocalPreference(t *testing.T, ate *ondatra.ATEDevice, bgp
 			t.Logf("LC: Prefix %v learned with localPreference : %v", prefix.GetAddress(), gotLocalPreference)
 			if gotLocalPreference != wantLocalPreference {
 				t.Fatalf("Prefix %v with unexpected local-preference : %v, expected: %v", subnet, gotLocalPreference, wantLocalPreference)
+			}
+		}
+	}
+	if !foundPrefix {
+		t.Fatalf("Prefix %v not present in OTG", subnet)
+	}
+
+}
+
+func validateIPv4PrefixCommunitySet(t *testing.T, ate *ondatra.ATEDevice, bgpPeerName, subnet, wantCommunitySet string) {
+
+	// t.Logf("LC: Sleeping 1min for Pause")
+	// time.Sleep(1 * time.Minute)
+	time.Sleep(10 * time.Second)
+	foundPrefix := false
+	prefixes := gnmi.GetAll(t, ate.OTG(), gnmi.OTG().BgpPeer(bgpPeerName).UnicastIpv4PrefixAny().State())
+	for _, prefix := range prefixes {
+		if prefix.GetAddress() == subnet {
+			foundPrefix = true
+			var gotCommunitySet string
+			for _, community := range prefix.Community {
+				gotCommunityNumber := community.GetCustomAsNumber()
+				gotCommunityValue := community.GetCustomAsValue()
+				gotCommunitySet = fmt.Sprint(gotCommunityNumber) + ":" + fmt.Sprint(gotCommunityValue)
+			}
+			t.Logf("LC: Prefix %v learned with CommunitySet : %v", prefix.GetAddress(), gotCommunitySet)
+			if gotCommunitySet != wantCommunitySet {
+				t.Fatalf("Prefix %v with unexpected Community: %v, expected: %v", prefix.GetAddress(), gotCommunitySet, wantCommunitySet)
 			}
 		}
 	}
