@@ -34,19 +34,22 @@ type testCase struct {
 }
 
 const (
-	ipv4PrefixLen            = 30
-	ipv6PrefixLen            = 126
-	subInterfaceIndex        = 0
-	mtu                      = 1500
-	peerGroupName            = "PEER-GROUP"
-	dutAsn                   = 64512
-	atePeer1Asn              = 64511
-	atePeer2Asn              = 64512
-	acceptRoute              = true
-	metricPropagate          = true
-	isV4                     = true
-	redistributeStaticPolicy = "fp-redistribute-static-policy"
-	replace                  = true
+	ipv4PrefixLen              = 30
+	ipv6PrefixLen              = 126
+	subInterfaceIndex          = 0
+	mtu                        = 1500
+	peerGroupName              = "PEER-GROUP"
+	dutAsn                     = 64512
+	atePeer1Asn                = 64511
+	atePeer2Asn                = 64512
+	acceptRoute                = true
+	metricPropagate            = true
+	isV4                       = true
+	replace                    = true
+	redistributeStaticPolicyV4 = "route-policy-v4"
+	redistributeStaticPolicyV6 = "route-policy-v6"
+	policyStatementV4          = "statement-v4"
+	policyStatementV6          = "statement-v6"
 )
 
 var (
@@ -118,96 +121,101 @@ var (
 
 	testCases = []testCase{
 		// 1.27-1
-		/*
-			{
-				name:     "redistribute-ipv4-static-routes-with-metric-propagation-disabled",
-				setup:    redistributeIPv4Static,
-				validate: validateRedistributeIPv4Static,
-				cleanup:  nil,
-			},
-			// 1.27-2
-			{
-				name:     "redistribute-ipv4-static-routes-with-metric-propagation-enabled",
-				setup:    redistributeIPv4StaticWithMetricPropagation,
-				validate: validateRedistributeIPv4StaticWithMetricPropagation,
-				cleanup:  nil,
-			},
-			// 1.27-3
-			{
-				name:     "redistribute-ipv6-static-routes-with-metric-propagation-disabled",
-				setup:    redistributeIPv6Static,
-				validate: validateRedistributeIPv6Static,
-				cleanup:  nil,
-			},
-			// 1.27-4
-			{
-				name:     "redistribute-ipv6-static-routes-with-metric-propagation-enabled",
-				setup:    redistributeIPv6StaticWithMetricPropagation,
-				validate: validateRedistributeIPv6StaticWithMetricPropagation,
-				cleanup:  nil,
-			},
-			// 1.27-5
-			{
-				name:     "redistribute-ipv4-ipv6-default-reject-policy",
-				setup:    redistributeIPv4IPv6StaticDefaultRejectPolicy,
-				validate: validateRedistributeIPv4IPv6DefaultRejectPolicy,
-				cleanup:  nil,
-			},
-			// 1.27-6
-			{
-				name:     "redistribute-ipv4-ipv6-route-policy",
-				setup:    redistributeIPv4IPv6StaticDefault,
-				validate: validateRedistributeIPv4IPv6Default,
-				cleanup:  nil,
-			},
-			// 1.27-7
-			{
-				name:     "redistribute-ipv4-route-policy-as-prepend",
-				setup:    redistributeIPv4StaticRoutePolicyWithASN,
-				validate: validateIPv4RouteWithASN,
-				cleanup:  nil,
-			},
-			// 1.27-8
-			{
-				name:     "redistribute-ipv4-route-policy-med",
-				setup:    redistributeIPv4StaticRoutePolicyWithMED,
-				validate: validateIPv4RouteWithMED,
-				cleanup:  nil,
-			},
-			// 1.27-9
-			{
-				name:     "redistribute-ipv4-route-policy-local-preference",
-				setup:    redistributeIPv4StaticRoutePolicyWithLocalPreference,
-				validate: validateIPv4RouteWithLocalPreference,
-				cleanup:  nil,
-			},
-			// 1.27-10
-			{
-				name:     "redistribute-ipv4-route-policy-community-set",
-				setup:    redistributeIPv4StaticRoutePolicyWithCommunitySet,
-				validate: validateIPv4RouteWithCommunitySet,
-				cleanup:  nil,
-			},
-			// 1.27-12
-			{
-				name:     "redistribute-ipv4-route-policy-unmatched-tag",
-				setup:    redistributeIPv4StaticRoutePolicyWithUnmatchedTagSet,
-				validate: validateIPv4RouteWithTagSetReject,
-				cleanup:  nil,
-			},
-			// 1.27-13
-			{
-				name:     "redistribute-ipv4-route-policy-matched-set",
-				setup:    redistributeIPv4StaticRoutePolicyWithMatchedTagSet,
-				validate: validateIPv4RouteWithTagSetAccept,
-				cleanup:  nil,
-			},
-		*/
+		{
+			name:     "redistribute-ipv4-static-routes-with-metric-propagation-disabled",
+			setup:    redistributeIPv4Static,
+			validate: validateRedistributeIPv4Static,
+			cleanup:  nil,
+		},
+		// 1.27-2
+		{
+			name:     "redistribute-ipv4-static-routes-with-metric-propagation-enabled",
+			setup:    redistributeIPv4StaticWithMetricPropagation,
+			validate: validateRedistributeIPv4StaticWithMetricPropagation,
+			cleanup:  nil,
+		},
+		// 1.27-3
+		{
+			name:     "redistribute-ipv6-static-routes-with-metric-propagation-disabled",
+			setup:    redistributeIPv6Static,
+			validate: validateRedistributeIPv6Static,
+			cleanup:  nil,
+		},
+		// 1.27-4
+		{
+			name:     "redistribute-ipv6-static-routes-with-metric-propagation-enabled",
+			setup:    redistributeIPv6StaticWithMetricPropagation,
+			validate: validateRedistributeIPv6StaticWithMetricPropagation,
+			cleanup:  nil,
+		},
+		// 1.27-5
+		{
+			name:     "redistribute-ipv4-ipv6-default-reject-policy",
+			setup:    redistributeIPv4IPv6StaticDefaultRejectPolicy,
+			validate: validateRedistributeIPv4IPv6DefaultRejectPolicy,
+			cleanup:  nil,
+		},
+		// 1.27-6
+		{
+			name:     "redistribute-ipv4-route-policy",
+			setup:    redistributeIPv4StaticRoutePolicy,
+			validate: validateRedistributeIPv4Default,
+			cleanup:  nil,
+		},
+		// 1.27-7
+		{
+			name:     "redistribute-ipv4-route-policy-as-prepend",
+			setup:    redistributeIPv4StaticRoutePolicyWithASN,
+			validate: validateIPv4RouteWithASN,
+			cleanup:  nil,
+		},
+		// 1.27-8
+		{
+			name:     "redistribute-ipv4-route-policy-med",
+			setup:    redistributeIPv4StaticRoutePolicyWithMED,
+			validate: validateIPv4RouteWithMED,
+			cleanup:  nil,
+		},
+		// 1.27-9
+		{
+			name:     "redistribute-ipv4-route-policy-local-preference",
+			setup:    redistributeIPv4StaticRoutePolicyWithLocalPreference,
+			validate: validateIPv4RouteWithLocalPreference,
+			cleanup:  nil,
+		},
+		// 1.27-10
+		{
+			name:     "redistribute-ipv4-route-policy-community-set",
+			setup:    redistributeIPv4StaticRoutePolicyWithCommunitySet,
+			validate: validateIPv4RouteWithCommunitySet,
+			cleanup:  nil,
+		},
+		// 1.27-12
+		{
+			name:     "redistribute-ipv4-route-policy-unmatched-tag",
+			setup:    redistributeIPv4StaticRoutePolicyWithUnmatchedTagSet,
+			validate: validateIPv4RouteWithTagSetReject,
+			cleanup:  nil,
+		},
+		// 1.27-13
+		{
+			name:     "redistribute-ipv4-route-policy-matched-set",
+			setup:    redistributeIPv4StaticRoutePolicyWithMatchedTagSet,
+			validate: validateIPv4RouteWithTagSetAccept,
+			cleanup:  nil,
+		},
 		// 1.27-14
 		{
 			name:     "redistribute-ipv4-route-policy-nexthop",
 			setup:    redistributeIPv4NullStaticRoute,
 			validate: validateRedistributeNullStaticRoute,
+			cleanup:  nil,
+		},
+		// 1.27-15
+		{
+			name:     "redistribute-ipv6-route-policy",
+			setup:    redistributeIPv6StaticRoutePolicy,
+			validate: validateRedistributeIPv6Default,
 			cleanup:  nil,
 		},
 	}
@@ -441,7 +449,7 @@ func configureTagSet(t *testing.T, dut *ondatra.DUTDevice, tValue uint32) {
 				Path: &gpb.Path{
 					Elem: []*gpb.PathElem{
 						{Name: "routing-policy"},
-						{Name: "policy", Key: map[string]string{"name": redistributeStaticPolicy}},
+						{Name: "policy", Key: map[string]string{"name": redistributeStaticPolicyV4}},
 						{Name: "statement", Key: map[string]string{"name": "statement-v4"}},
 					},
 				},
@@ -699,9 +707,17 @@ func redistributeStatic(t *testing.T, dut *ondatra.DUTDevice, isV4, acceptRoute,
 func redistributeNokiaStatic(t *testing.T, dut *ondatra.DUTDevice, isV4, acceptRoute, mPropagation, replace bool) {
 	dutOcRoot := &oc.Root{}
 	rp := dutOcRoot.GetOrCreateRoutingPolicy()
+	redistributeStaticPolicy := redistributeStaticPolicyV4
+	bgpPath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).Protocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP, "BGP").Bgp().Neighbor(atePort1.IPv4).AfiSafi(oc.BgpTypes_AFI_SAFI_TYPE_IPV4_UNICAST).ApplyPolicy().ExportPolicy()
+	policyStatement := policyStatementV4
+	if !isV4 {
+		redistributeStaticPolicy = redistributeStaticPolicyV6
+		policyStatement = policyStatementV6
+		bgpPath = gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).Protocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP, "BGP").Bgp().Neighbor(atePort1.IPv6).AfiSafi(oc.BgpTypes_AFI_SAFI_TYPE_IPV6_UNICAST).ApplyPolicy().ExportPolicy()
+	}
 
 	apolicy := rp.GetOrCreatePolicyDefinition(redistributeStaticPolicy)
-	astmt, _ := apolicy.AppendNewStatement("redistribute-static")
+	astmt, _ := apolicy.AppendNewStatement(policyStatement)
 	astmt.GetOrCreateConditions().SetInstallProtocolEq(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_STATIC)
 	astmt.GetOrCreateActions().PolicyResult = oc.RoutingPolicy_PolicyResultType_REJECT_ROUTE
 	if acceptRoute {
@@ -716,10 +732,6 @@ func redistributeNokiaStatic(t *testing.T, dut *ondatra.DUTDevice, isV4, acceptR
 	rpConfPath := gnmi.OC().RoutingPolicy()
 	gnmi.Replace(t, dut, rpConfPath.PolicyDefinition(redistributeStaticPolicy).Config(), apolicy)
 
-	bgpPath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).Protocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP, "BGP").Bgp().Neighbor(atePort1.IPv4).AfiSafi(oc.BgpTypes_AFI_SAFI_TYPE_IPV4_UNICAST).ApplyPolicy().ExportPolicy()
-	if !isV4 {
-		bgpPath = gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).Protocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP, "BGP").Bgp().Neighbor(atePort1.IPv6).AfiSafi(oc.BgpTypes_AFI_SAFI_TYPE_IPV6_UNICAST).ApplyPolicy().ExportPolicy()
-	}
 	if replace {
 		gnmi.Replace(t, dut, bgpPath.Config(), []string{redistributeStaticPolicy})
 	} else {
@@ -878,17 +890,25 @@ func validateRedistributeIPv4IPv6DefaultRejectPolicy(t *testing.T, dut *ondatra.
 	validateLearnedIPv6Prefix(t, ate, atePort1.Name+".BGP6.peer", "2024:db8:128:128::", 0, false)
 }
 
-func redistributeIPv4IPv6StaticDefault(t *testing.T, dut *ondatra.DUTDevice) {
+func validateRedistributeIPv4Default(t *testing.T, dut *ondatra.DUTDevice, ate *ondatra.ATEDevice) {
 	if dut.Vendor() != ondatra.NOKIA {
-		redistributeStatic(t, dut, isV4, acceptRoute, !metricPropagate)
-		redistributeStatic(t, dut, !isV4, acceptRoute, !metricPropagate)
-	} else {
-		redistributeNokiaStatic(t, dut, isV4, acceptRoute, !metricPropagate, replace)
-		redistributeNokiaStatic(t, dut, !isV4, acceptRoute, !metricPropagate, !replace)
+		tcState := gnmi.Get(t, dut, gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).TableConnection(
+			oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_STATIC,
+			oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP,
+			oc.Types_ADDRESS_FAMILY_IPV4).State())
+
+		// just checking that metric propagation got enabled since the first test case already covers
+		// the rest of the settings we care about, which in this case is the updated policy
+		if tcState.GetDefaultImportPolicy() != oc.RoutingPolicy_DefaultPolicyType_REJECT_ROUTE {
+			t.Fatal("default import policy is not reject route but it should be")
+		}
 	}
+
+	// we should no longer see these prefixes on either peering session
+	validateLearnedIPv4Prefix(t, ate, atePort1.Name+".BGP4.peer", "192.168.10.0", 0, true)
 }
 
-func validateRedistributeIPv4IPv6Default(t *testing.T, dut *ondatra.DUTDevice, ate *ondatra.ATEDevice) {
+func validateRedistributeIPv6Default(t *testing.T, dut *ondatra.DUTDevice, ate *ondatra.ATEDevice) {
 	if dut.Vendor() != ondatra.NOKIA {
 		tcState := gnmi.Get(t, dut, gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).TableConnection(
 			oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_STATIC,
@@ -903,18 +923,17 @@ func validateRedistributeIPv4IPv6Default(t *testing.T, dut *ondatra.DUTDevice, a
 	}
 
 	// we should no longer see these prefixes on either peering session
-	validateLearnedIPv4Prefix(t, ate, atePort1.Name+".BGP4.peer", "192.168.10.0", 0, true)
 	validateLearnedIPv6Prefix(t, ate, atePort1.Name+".BGP6.peer", "2024:db8:128:128::", 0, true)
 }
 
 func redistributeIPv4StaticRoutePolicy(t *testing.T, dut *ondatra.DUTDevice) {
 	niPath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut))
 	// policyPath := gnmi.OC().RoutingPolicy().PolicyDefinition("import-dut-port2-connected-subnet")
-	policyPath := gnmi.OC().RoutingPolicy().PolicyDefinition(redistributeStaticPolicy)
+	policyPath := gnmi.OC().RoutingPolicy().PolicyDefinition(redistributeStaticPolicyV4)
 
 	dutOcRoot := &oc.Root{}
 	redistributePolicy := dutOcRoot.GetOrCreateRoutingPolicy()
-	redistributePolicyDefinition := redistributePolicy.GetOrCreatePolicyDefinition(redistributeStaticPolicy)
+	redistributePolicyDefinition := redistributePolicy.GetOrCreatePolicyDefinition(redistributeStaticPolicyV4)
 
 	v4PrefixSet := redistributePolicy.GetOrCreateDefinedSets().GetOrCreatePrefixSet("prefix-set-v4")
 	// TODO test says use "exact" is that literally ok? in the other case we have like 30..32 which
@@ -928,7 +947,7 @@ func redistributeIPv4StaticRoutePolicy(t *testing.T, dut *ondatra.DUTDevice) {
 	gnmi.Replace(t, dut, gnmi.OC().RoutingPolicy().DefinedSets().PrefixSet("prefix-set-v4").Config(), v4PrefixSet)
 
 	if dut.Vendor() == ondatra.NOKIA {
-		redistributeStatic, err := redistributePolicyDefinition.AppendNewStatement("redistribute-static")
+		redistributeStatic, err := redistributePolicyDefinition.AppendNewStatement(policyStatementV4)
 		if err != nil {
 			t.Fatalf("failed creating new policy statement, err: %s", err)
 		}
@@ -962,27 +981,91 @@ func redistributeIPv4StaticRoutePolicy(t *testing.T, dut *ondatra.DUTDevice) {
 		)
 		tc.SetImportPolicy([]string{"REJECT_ROUTE"})
 		tc.SetDisableMetricPropagation(true)
-		tc.SetImportPolicy([]string{redistributeStaticPolicy})
+		tc.SetImportPolicy([]string{redistributeStaticPolicyV4})
 
 		gnmi.Update(t, dut, niPath.Config(), networkInstance)
 	} else {
 
 		bgpPath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).Protocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP, "BGP").Bgp().Neighbor(atePort1.IPv4).AfiSafi(oc.BgpTypes_AFI_SAFI_TYPE_IPV4_UNICAST).ApplyPolicy().ExportPolicy()
-		gnmi.Replace(t, dut, bgpPath.Config(), []string{redistributeStaticPolicy})
+		gnmi.Replace(t, dut, bgpPath.Config(), []string{redistributeStaticPolicyV4})
 		// redistributeNokiaStatic(t, dut, isV4, !acceptRoute, metricPropagate)
+	}
+}
+
+func redistributeIPv6StaticRoutePolicy(t *testing.T, dut *ondatra.DUTDevice) {
+	niPath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut))
+	policyPath := gnmi.OC().RoutingPolicy().PolicyDefinition(redistributeStaticPolicyV6)
+
+	dutOcRoot := &oc.Root{}
+	redistributePolicy := dutOcRoot.GetOrCreateRoutingPolicy()
+	redistributePolicyDefinition := redistributePolicy.GetOrCreatePolicyDefinition(redistributeStaticPolicyV6)
+
+	v6PrefixSet := redistributePolicy.GetOrCreateDefinedSets().GetOrCreatePrefixSet("prefix-set-v6")
+	// TODO test says use "exact" is that literally ok? in the other case we have like 30..32 which
+	//  makes sense of course, do they just mean 32..32 or just 32 or something?
+	v6PrefixSet.GetOrCreatePrefix("2024:db8:128:128::/64", "exact")
+	// v6PrefixSet.SetMode(oc.PrefixSet_Mode_IPV6)
+
+	v6PrefixSet.GetOrCreatePrefix("2024:db8:64:64::/64", "exact")
+	// v6PrefixSet.SetMode(oc.PrefixSet_Mode_IPV6)
+
+	gnmi.Replace(t, dut, gnmi.OC().RoutingPolicy().DefinedSets().PrefixSet("prefix-set-v6").Config(), v6PrefixSet)
+
+	if dut.Vendor() == ondatra.NOKIA {
+		redistributeStatic, err := redistributePolicyDefinition.AppendNewStatement(policyStatementV6)
+		if err != nil {
+			t.Fatalf("failed creating new policy statement, err: %s", err)
+		}
+		redistributeStatic.GetOrCreateConditions().SetInstallProtocolEq(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_STATIC)
+		redistributeStatic.GetOrCreateActions().PolicyResult = oc.RoutingPolicy_PolicyResultType_ACCEPT_ROUTE
+		redistributeStatic.GetOrCreateActions().GetOrCreateBgpActions().SetSetRouteOrigin(oc.E_BgpPolicy_BgpOriginAttrType(oc.BgpPolicy_BgpOriginAttrType_IGP))
+		redistributeStatic.GetOrCreateActions().GetOrCreateBgpActions().SetSetMed(oc.E_BgpActions_SetMed(oc.BgpActions_SetMed_IGP))
+	}
+
+	ipv6PrefixPolicyStatement, err := redistributePolicyDefinition.AppendNewStatement("statement-v6")
+	if err != nil {
+		t.Fatalf("failed creating new policy statement, err: %s", err)
+	}
+
+	ipv6PrefixPolicyStatementAction := ipv6PrefixPolicyStatement.GetOrCreateActions()
+	ipv6PrefixPolicyStatementAction.SetPolicyResult(oc.RoutingPolicy_PolicyResultType_ACCEPT_ROUTE)
+
+	ipv6PrefixPolicyStatementConditionsPrefixes := ipv6PrefixPolicyStatement.GetOrCreateConditions().GetOrCreateMatchPrefixSet()
+	ipv6PrefixPolicyStatementConditionsPrefixes.SetPrefixSet("prefix-set-v6")
+	// ipv6PrefixPolicyStatementConditionsPrefixes.SetMatchSetOptions(oc.RoutingPolicy_MatchSetOptionsRestrictedType_ANY)
+
+	gnmi.Replace(t, dut, policyPath.Config(), redistributePolicyDefinition)
+
+	if dut.Vendor() != ondatra.NOKIA {
+		networkInstance := dutOcRoot.GetOrCreateNetworkInstance(deviations.DefaultNetworkInstance(dut))
+
+		tc := networkInstance.GetOrCreateTableConnection(
+			oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_STATIC,
+			oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP,
+			oc.Types_ADDRESS_FAMILY_IPV6,
+		)
+		tc.SetImportPolicy([]string{"REJECT_ROUTE"})
+		tc.SetDisableMetricPropagation(true)
+		tc.SetImportPolicy([]string{redistributeStaticPolicyV6})
+
+		gnmi.Update(t, dut, niPath.Config(), networkInstance)
+	} else {
+
+		bgpPath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).Protocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP, "BGP").Bgp().Neighbor(atePort1.IPv6).AfiSafi(oc.BgpTypes_AFI_SAFI_TYPE_IPV6_UNICAST).ApplyPolicy().ExportPolicy()
+		gnmi.Replace(t, dut, bgpPath.Config(), []string{redistributeStaticPolicyV6})
 	}
 }
 
 func redistributeIPv4StaticRoutePolicyWithASN(t *testing.T, dut *ondatra.DUTDevice) {
 	niPath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut))
-	policyPath := gnmi.OC().RoutingPolicy().PolicyDefinition(redistributeStaticPolicy)
+	policyPath := gnmi.OC().RoutingPolicy().PolicyDefinition(redistributeStaticPolicyV4)
 
 	dutOcRoot := &oc.Root{}
 	redistributePolicy := dutOcRoot.GetOrCreateRoutingPolicy()
-	redistributePolicyDefinition := redistributePolicy.GetOrCreatePolicyDefinition(redistributeStaticPolicy)
+	redistributePolicyDefinition := redistributePolicy.GetOrCreatePolicyDefinition(redistributeStaticPolicyV4)
 
 	if dut.Vendor() == ondatra.NOKIA {
-		redistributeStatic, err := redistributePolicyDefinition.AppendNewStatement("redistribute-static")
+		redistributeStatic, err := redistributePolicyDefinition.AppendNewStatement(policyStatementV4)
 		if err != nil {
 			t.Fatalf("failed creating new policy statement, err: %s", err)
 		}
@@ -1016,27 +1099,27 @@ func redistributeIPv4StaticRoutePolicyWithASN(t *testing.T, dut *ondatra.DUTDevi
 		)
 		tc.SetImportPolicy([]string{"REJECT_ROUTE"})
 		tc.SetDisableMetricPropagation(true)
-		tc.SetImportPolicy([]string{redistributeStaticPolicy})
+		tc.SetImportPolicy([]string{redistributeStaticPolicyV4})
 
 		gnmi.Update(t, dut, niPath.Config(), networkInstance)
 	} else {
 
 		bgpPath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).Protocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP, "BGP").Bgp().Neighbor(atePort1.IPv4).AfiSafi(oc.BgpTypes_AFI_SAFI_TYPE_IPV4_UNICAST).ApplyPolicy().ExportPolicy()
-		gnmi.Replace(t, dut, bgpPath.Config(), []string{redistributeStaticPolicy})
+		gnmi.Replace(t, dut, bgpPath.Config(), []string{redistributeStaticPolicyV4})
 		// redistributeNokiaStatic(t, dut, isV4, !acceptRoute, metricPropagate)
 	}
 }
 
 func redistributeIPv4StaticRoutePolicyWithMED(t *testing.T, dut *ondatra.DUTDevice) {
 	niPath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut))
-	policyPath := gnmi.OC().RoutingPolicy().PolicyDefinition(redistributeStaticPolicy)
+	policyPath := gnmi.OC().RoutingPolicy().PolicyDefinition(redistributeStaticPolicyV4)
 
 	dutOcRoot := &oc.Root{}
 	redistributePolicy := dutOcRoot.GetOrCreateRoutingPolicy()
-	redistributePolicyDefinition := redistributePolicy.GetOrCreatePolicyDefinition(redistributeStaticPolicy)
+	redistributePolicyDefinition := redistributePolicy.GetOrCreatePolicyDefinition(redistributeStaticPolicyV4)
 
 	if dut.Vendor() == ondatra.NOKIA {
-		redistributeStatic, err := redistributePolicyDefinition.AppendNewStatement("redistribute-static")
+		redistributeStatic, err := redistributePolicyDefinition.AppendNewStatement(policyStatementV4)
 		if err != nil {
 			t.Fatalf("failed creating new policy statement, err: %s", err)
 		}
@@ -1067,27 +1150,27 @@ func redistributeIPv4StaticRoutePolicyWithMED(t *testing.T, dut *ondatra.DUTDevi
 		)
 		tc.SetImportPolicy([]string{"REJECT_ROUTE"})
 		tc.SetDisableMetricPropagation(true)
-		tc.SetImportPolicy([]string{redistributeStaticPolicy})
+		tc.SetImportPolicy([]string{redistributeStaticPolicyV4})
 
 		gnmi.Update(t, dut, niPath.Config(), networkInstance)
 	} else {
 
 		bgpPath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).Protocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP, "BGP").Bgp().Neighbor(atePort1.IPv4).AfiSafi(oc.BgpTypes_AFI_SAFI_TYPE_IPV4_UNICAST).ApplyPolicy().ExportPolicy()
-		gnmi.Replace(t, dut, bgpPath.Config(), []string{redistributeStaticPolicy})
+		gnmi.Replace(t, dut, bgpPath.Config(), []string{redistributeStaticPolicyV4})
 		// redistributeNokiaStatic(t, dut, isV4, !acceptRoute, metricPropagate)
 	}
 }
 
 func redistributeIPv4StaticRoutePolicyWithLocalPreference(t *testing.T, dut *ondatra.DUTDevice) {
 	niPath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut))
-	policyPath := gnmi.OC().RoutingPolicy().PolicyDefinition(redistributeStaticPolicy)
+	policyPath := gnmi.OC().RoutingPolicy().PolicyDefinition(redistributeStaticPolicyV4)
 
 	dutOcRoot := &oc.Root{}
 	redistributePolicy := dutOcRoot.GetOrCreateRoutingPolicy()
-	redistributePolicyDefinition := redistributePolicy.GetOrCreatePolicyDefinition(redistributeStaticPolicy)
+	redistributePolicyDefinition := redistributePolicy.GetOrCreatePolicyDefinition(redistributeStaticPolicyV4)
 
 	if dut.Vendor() == ondatra.NOKIA {
-		redistributeStatic, err := redistributePolicyDefinition.AppendNewStatement("redistribute-static")
+		redistributeStatic, err := redistributePolicyDefinition.AppendNewStatement(policyStatementV4)
 		if err != nil {
 			t.Fatalf("failed creating new policy statement, err: %s", err)
 		}
@@ -1118,25 +1201,25 @@ func redistributeIPv4StaticRoutePolicyWithLocalPreference(t *testing.T, dut *ond
 		)
 		tc.SetImportPolicy([]string{"REJECT_ROUTE"})
 		tc.SetDisableMetricPropagation(true)
-		tc.SetImportPolicy([]string{redistributeStaticPolicy})
+		tc.SetImportPolicy([]string{redistributeStaticPolicyV4})
 
 		gnmi.Update(t, dut, niPath.Config(), networkInstance)
 	} else {
 
 		bgpPath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).Protocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP, "BGP").Bgp().Neighbor(atePort3.IPv4).AfiSafi(oc.BgpTypes_AFI_SAFI_TYPE_IPV4_UNICAST).ApplyPolicy().ExportPolicy()
-		gnmi.Replace(t, dut, bgpPath.Config(), []string{redistributeStaticPolicy})
+		gnmi.Replace(t, dut, bgpPath.Config(), []string{redistributeStaticPolicyV4})
 		// redistributeNokiaStatic(t, dut, isV4, !acceptRoute, metricPropagate)
 	}
 }
 
 func redistributeIPv4StaticRoutePolicyWithCommunitySet(t *testing.T, dut *ondatra.DUTDevice) {
 	niPath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut))
-	policyPath := gnmi.OC().RoutingPolicy().PolicyDefinition(redistributeStaticPolicy)
+	policyPath := gnmi.OC().RoutingPolicy().PolicyDefinition(redistributeStaticPolicyV4)
 	communityPath := gnmi.OC().RoutingPolicy().DefinedSets().BgpDefinedSets().CommunitySet("community-set-v4")
 
 	dutOcRoot := &oc.Root{}
 	redistributePolicy := dutOcRoot.GetOrCreateRoutingPolicy()
-	redistributePolicyDefinition := redistributePolicy.GetOrCreatePolicyDefinition(redistributeStaticPolicy)
+	redistributePolicyDefinition := redistributePolicy.GetOrCreatePolicyDefinition(redistributeStaticPolicyV4)
 
 	communitySet := dutOcRoot.GetOrCreateRoutingPolicy()
 	communitySetPolicyDefinition := communitySet.GetOrCreateDefinedSets().GetOrCreateBgpDefinedSets().GetOrCreateCommunitySet("community-set-v4")
@@ -1146,7 +1229,7 @@ func redistributeIPv4StaticRoutePolicyWithCommunitySet(t *testing.T, dut *ondatr
 	gnmi.Replace(t, dut, communityPath.Config(), communitySetPolicyDefinition)
 
 	if dut.Vendor() == ondatra.NOKIA {
-		redistributeStatic, err := redistributePolicyDefinition.AppendNewStatement("redistribute-static")
+		redistributeStatic, err := redistributePolicyDefinition.AppendNewStatement(policyStatementV4)
 		if err != nil {
 			t.Fatalf("failed creating new policy statement, err: %s", err)
 		}
@@ -1180,13 +1263,13 @@ func redistributeIPv4StaticRoutePolicyWithCommunitySet(t *testing.T, dut *ondatr
 		)
 		tc.SetImportPolicy([]string{"REJECT_ROUTE"})
 		tc.SetDisableMetricPropagation(true)
-		tc.SetImportPolicy([]string{redistributeStaticPolicy})
+		tc.SetImportPolicy([]string{redistributeStaticPolicyV4})
 
 		gnmi.Update(t, dut, niPath.Config(), networkInstance)
 	} else {
 
 		bgpPath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).Protocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP, "BGP").Bgp().Neighbor(atePort3.IPv4).AfiSafi(oc.BgpTypes_AFI_SAFI_TYPE_IPV4_UNICAST).ApplyPolicy().ExportPolicy()
-		gnmi.Replace(t, dut, bgpPath.Config(), []string{redistributeStaticPolicy})
+		gnmi.Replace(t, dut, bgpPath.Config(), []string{redistributeStaticPolicyV4})
 		// redistributeNokiaStatic(t, dut, isV4, !acceptRoute, metricPropagate)
 	}
 }
@@ -1201,16 +1284,16 @@ func redistributeIPv4StaticRoutePolicyWithMatchedTagSet(t *testing.T, dut *ondat
 
 func redistributeIPv4StaticRoutePolicyWithTagSet(t *testing.T, dut *ondatra.DUTDevice, tagSetValue uint32) {
 	niPath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut))
-	policyPath := gnmi.OC().RoutingPolicy().PolicyDefinition(redistributeStaticPolicy)
+	policyPath := gnmi.OC().RoutingPolicy().PolicyDefinition(redistributeStaticPolicyV4)
 	tagSetPath := gnmi.OC().RoutingPolicy().DefinedSets().TagSet("tag-set-v4")
 
 	dutOcRoot := &oc.Root{}
 	redistributePolicy := dutOcRoot.GetOrCreateRoutingPolicy()
-	redistributePolicyDefinition := redistributePolicy.GetOrCreatePolicyDefinition(redistributeStaticPolicy)
+	redistributePolicyDefinition := redistributePolicy.GetOrCreatePolicyDefinition(redistributeStaticPolicyV4)
 
 	if dut.Vendor() == ondatra.NOKIA {
 		// redistributeNokiaStatic(t, dut, isV4, acceptRoute, metricPropagate, replace)
-		redistributeStatic, err := redistributePolicyDefinition.AppendNewStatement("redistribute-static")
+		redistributeStatic, err := redistributePolicyDefinition.AppendNewStatement(policyStatementV4)
 		if err != nil {
 			t.Fatalf("failed creating new policy statement, err: %s", err)
 		}
@@ -1222,7 +1305,7 @@ func redistributeIPv4StaticRoutePolicyWithTagSet(t *testing.T, dut *ondatra.DUTD
 		gnmi.Replace(t, dut, policyPath.Config(), redistributePolicyDefinition)
 		configureTagSet(t, dut, tagSetValue)
 		bgpPath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).Protocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP, "BGP").Bgp().Neighbor(atePort1.IPv4).AfiSafi(oc.BgpTypes_AFI_SAFI_TYPE_IPV4_UNICAST).ApplyPolicy().ExportPolicy()
-		gnmi.Replace(t, dut, bgpPath.Config(), []string{redistributeStaticPolicy})
+		gnmi.Replace(t, dut, bgpPath.Config(), []string{redistributeStaticPolicyV4})
 	} else {
 		tagSet := dutOcRoot.GetOrCreateRoutingPolicy()
 		tagSetPolicyDefinition := tagSet.GetOrCreateDefinedSets().GetOrCreateTagSet("tag-set-v4")
@@ -1250,7 +1333,7 @@ func redistributeIPv4StaticRoutePolicyWithTagSet(t *testing.T, dut *ondatra.DUTD
 			oc.Types_ADDRESS_FAMILY_IPV4,
 		)
 		tc.SetDisableMetricPropagation(true)
-		tc.SetImportPolicy([]string{redistributeStaticPolicy})
+		tc.SetImportPolicy([]string{redistributeStaticPolicyV4})
 
 		gnmi.Update(t, dut, niPath.Config(), networkInstance)
 	}
@@ -1259,7 +1342,7 @@ func redistributeIPv4StaticRoutePolicyWithTagSet(t *testing.T, dut *ondatra.DUTD
 func redistributeIPv4NullStaticRoute(t *testing.T, dut *ondatra.DUTDevice) {
 
 	niPath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut))
-	policyPath := gnmi.OC().RoutingPolicy().PolicyDefinition(redistributeStaticPolicy)
+	policyPath := gnmi.OC().RoutingPolicy().PolicyDefinition(redistributeStaticPolicyV4)
 	staticPath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).Protocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_STATIC, "static")
 	dutOcRoot := &oc.Root{}
 
@@ -1278,11 +1361,11 @@ func redistributeIPv4NullStaticRoute(t *testing.T, dut *ondatra.DUTDevice) {
 	gnmi.Update(t, dut, staticPath.Config(), networkInstanceProtocolStatic)
 
 	redistributePolicy := dutOcRoot.GetOrCreateRoutingPolicy()
-	redistributePolicyDefinition := redistributePolicy.GetOrCreatePolicyDefinition(redistributeStaticPolicy)
+	redistributePolicyDefinition := redistributePolicy.GetOrCreatePolicyDefinition(redistributeStaticPolicyV4)
 
 	if dut.Vendor() == ondatra.NOKIA {
 		// redistributeNokiaStatic(t, dut, isV4, acceptRoute, metricPropagate, replace)
-		redistributeStatic, err := redistributePolicyDefinition.AppendNewStatement("redistribute-static")
+		redistributeStatic, err := redistributePolicyDefinition.AppendNewStatement(policyStatementV4)
 		if err != nil {
 			t.Fatalf("failed creating new policy statement, err: %s", err)
 		}
@@ -1293,12 +1376,12 @@ func redistributeIPv4NullStaticRoute(t *testing.T, dut *ondatra.DUTDevice) {
 		redistributeStatic.GetOrCreateActions().GetOrCreateBgpActions().SetSetMed(oc.UnionUint32(0))
 
 		statementV4, err := redistributePolicyDefinition.AppendNewStatement("statement-v4")
-		statementV4.GetOrCreateActions().GetOrCreateBgpActions().SetSetNextHop(oc.UnionString("192.168.1.6"))
+		statementV4.GetOrCreateActions().GetOrCreateBgpActions().SetSetNextHop(oc.UnionString("192.168.1.9"))
 		statementV4.GetOrCreateActions().PolicyResult = oc.RoutingPolicy_PolicyResultType_ACCEPT_ROUTE
 
 		gnmi.Replace(t, dut, policyPath.Config(), redistributePolicyDefinition)
 		bgpPath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).Protocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP, "BGP").Bgp().Neighbor(atePort1.IPv4).AfiSafi(oc.BgpTypes_AFI_SAFI_TYPE_IPV4_UNICAST).ApplyPolicy().ExportPolicy()
-		gnmi.Replace(t, dut, bgpPath.Config(), []string{redistributeStaticPolicy})
+		gnmi.Replace(t, dut, bgpPath.Config(), []string{redistributeStaticPolicyV4})
 	} else {
 		ipv4PrefixPolicyStatement, err := redistributePolicyDefinition.AppendNewStatement("statement-v4")
 		if err != nil {
@@ -1306,7 +1389,7 @@ func redistributeIPv4NullStaticRoute(t *testing.T, dut *ondatra.DUTDevice) {
 		}
 
 		ipv4PrefixPolicyStatementAction := ipv4PrefixPolicyStatement.GetOrCreateActions()
-		ipv4PrefixPolicyStatementAction.GetOrCreateBgpActions().SetSetNextHop(oc.UnionString("192.168.1.6"))
+		ipv4PrefixPolicyStatementAction.GetOrCreateBgpActions().SetSetNextHop(oc.UnionString("192.168.1.9"))
 		ipv4PrefixPolicyStatementAction.SetPolicyResult(oc.RoutingPolicy_PolicyResultType_ACCEPT_ROUTE)
 		gnmi.Replace(t, dut, policyPath.Config(), redistributePolicyDefinition)
 
@@ -1316,7 +1399,7 @@ func redistributeIPv4NullStaticRoute(t *testing.T, dut *ondatra.DUTDevice) {
 			oc.Types_ADDRESS_FAMILY_IPV4,
 		)
 		tc.SetDisableMetricPropagation(true)
-		tc.SetImportPolicy([]string{redistributeStaticPolicy})
+		tc.SetImportPolicy([]string{redistributeStaticPolicyV4})
 
 		gnmi.Update(t, dut, niPath.Config(), networkInstance)
 	}
@@ -1339,7 +1422,7 @@ func validateRedistributeIPv4RouteWithTagSet(t *testing.T, dut *ondatra.DUTDevic
 		importPolicies := tcState.GetImportPolicy()
 		found := false
 		for _, iPolicy := range importPolicies {
-			if iPolicy == redistributeStaticPolicy {
+			if iPolicy == redistributeStaticPolicyV4 {
 				found = true
 			}
 		}
@@ -1356,12 +1439,12 @@ func validateRedistributeIPv4RouteWithTagSet(t *testing.T, dut *ondatra.DUTDevic
 	var foundPDef oc.RoutingPolicy_PolicyDefinition
 	policyDef := gnmi.GetAll(t, dut, gnmi.OC().RoutingPolicy().PolicyDefinitionAny().State())
 	for _, pDef := range policyDef {
-		if pDef.GetName() == redistributeStaticPolicy {
+		if pDef.GetName() == redistributeStaticPolicyV4 {
 			foundPDef = *pDef
 		}
 	}
 
-	if foundPDef.GetName() != redistributeStaticPolicy {
+	if foundPDef.GetName() != redistributeStaticPolicyV4 {
 		t.Fatal("Expected import policy is not configured")
 	}
 	if dut.Vendor() != ondatra.NOKIA {
@@ -1390,7 +1473,7 @@ func validateRedistributeNullStaticRoute(t *testing.T, dut *ondatra.DUTDevice, a
 		importPolicies := tcState.GetImportPolicy()
 		found := false
 		for _, iPolicy := range importPolicies {
-			if iPolicy == redistributeStaticPolicy {
+			if iPolicy == redistributeStaticPolicyV4 {
 				found = true
 			}
 		}
@@ -1408,12 +1491,12 @@ func validateRedistributeNullStaticRoute(t *testing.T, dut *ondatra.DUTDevice, a
 	var foundPDef oc.RoutingPolicy_PolicyDefinition
 	policyDef := gnmi.GetAll(t, dut, gnmi.OC().RoutingPolicy().PolicyDefinitionAny().State())
 	for _, pDef := range policyDef {
-		if pDef.GetName() == redistributeStaticPolicy {
+		if pDef.GetName() == redistributeStaticPolicyV4 {
 			foundPDef = *pDef
 		}
 	}
 
-	if foundPDef.GetName() != redistributeStaticPolicy {
+	if foundPDef.GetName() != redistributeStaticPolicyV4 {
 		t.Fatal("Expected import policy is not configured")
 	}
 
@@ -1443,7 +1526,7 @@ func validateRedistributeIPv4RoutePolicy(t *testing.T, dut *ondatra.DUTDevice, a
 		}
 
 		// we replaced this container so there should only be our import policy anyway
-		if importPolicies[0] != redistributeStaticPolicy {
+		if importPolicies[0] != redistributeStaticPolicyV4 {
 			t.Fatal("expected import policy is not configured")
 		}
 	}
