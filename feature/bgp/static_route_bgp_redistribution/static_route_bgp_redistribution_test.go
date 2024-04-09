@@ -337,199 +337,6 @@ func configureDUTStatic(
 	gnmi.Replace(t, dut, staticPath.Config(), networkInstanceProtocolStatic)
 }
 
-func attachTagSetToStaticRoute(t *testing.T, dut *ondatra.DUTDevice, prefix, tagPolicy string) {
-
-	tagValue, err := json.Marshal(tagPolicy)
-	if err != nil {
-		t.Fatalf("Error with json Marshal: %v", err)
-	}
-
-	gpbSetRequest := &gpb.SetRequest{
-		Prefix: &gpb.Path{
-			Origin: "native",
-		},
-		Update: []*gpb.Update{
-			{
-				Path: &gpb.Path{
-					Elem: []*gpb.PathElem{
-						{Name: "network-instance", Key: map[string]string{"name": "DEFAULT"}},
-						{Name: "static-routes"},
-						{Name: "route", Key: map[string]string{"prefix": prefix}},
-						{Name: "tag-set"},
-					},
-				},
-				Val: &gpb.TypedValue{
-					Value: &gpb.TypedValue_JsonIetfVal{
-						JsonIetfVal: tagValue,
-					},
-				},
-			},
-		},
-	}
-
-	gnmiClient := dut.RawAPIs().GNMI(t)
-	if _, err := gnmiClient.Set(context.Background(), gpbSetRequest); err != nil {
-		t.Fatalf("Unexpected error updating SRL static-route tag-set: %v", err)
-	}
-
-}
-
-func configureStaticRouteTagSet(t *testing.T, dut *ondatra.DUTDevice) {
-
-	var routingPolicyTagSetValueV4 = []any{
-		map[string]any{
-			"tag-value": []any{
-				40,
-			},
-		},
-	}
-	tagValueV4, err := json.Marshal(routingPolicyTagSetValueV4)
-	if err != nil {
-		t.Fatalf("Error with json Marshal: %v", err)
-	}
-	var routingPolicyTagSetValueV6 = []any{
-		map[string]any{
-			"tag-value": []any{
-				60,
-			},
-		},
-	}
-	tagValueV6, err := json.Marshal(routingPolicyTagSetValueV6)
-	if err != nil {
-		t.Fatalf("Error with json Marshal: %v", err)
-	}
-
-	gpbSetRequest := &gpb.SetRequest{
-		Prefix: &gpb.Path{
-			Origin: "native",
-		},
-		Update: []*gpb.Update{
-			{
-				Path: &gpb.Path{
-					Elem: []*gpb.PathElem{
-						{Name: "routing-policy"},
-						{Name: "tag-set", Key: map[string]string{"name": "tag-static-v4"}},
-					},
-				},
-				Val: &gpb.TypedValue{
-					Value: &gpb.TypedValue_JsonIetfVal{
-						JsonIetfVal: tagValueV4,
-					},
-				},
-			},
-			{
-				Path: &gpb.Path{
-					Elem: []*gpb.PathElem{
-						{Name: "routing-policy"},
-						{Name: "tag-set", Key: map[string]string{"name": "tag-static-v6"}},
-					},
-				},
-				Val: &gpb.TypedValue{
-					Value: &gpb.TypedValue_JsonIetfVal{
-						JsonIetfVal: tagValueV6,
-					},
-				},
-			},
-		},
-	}
-
-	gnmiClient := dut.RawAPIs().GNMI(t)
-	if _, err := gnmiClient.Set(context.Background(), gpbSetRequest); err != nil {
-		t.Fatalf("Unexpected error updating SRL routing-policy tag-set for static-route: %v", err)
-	}
-}
-
-func configureTagSet(t *testing.T, dut *ondatra.DUTDevice, isV4 bool, tValue uint32) {
-
-	tName := "tag-set-v4"
-	redistributeStaticPolicy := redistributeStaticPolicyV4
-	policyStatement := policyStatementV4
-	if !isV4 {
-		tName = "tag-set-v6"
-		redistributeStaticPolicy = redistributeStaticPolicyV6
-		policyStatement = policyStatementV6
-	}
-
-	var routingPolicyTagSet = []any{
-		map[string]any{
-			"match": map[string]any{
-				"internal-tags": map[string]any{
-					"tag-set": []string{tName},
-				},
-			},
-			"action": map[string]any{
-				"policy-result": "accept",
-			},
-		},
-	}
-	tagSetStatement, err := json.Marshal(routingPolicyTagSet)
-	if err != nil {
-		t.Fatalf("Error with json Marshal: %v", err)
-	}
-	var routingPolicyTagSetValue = []any{
-		map[string]any{
-			"tag-value": []any{
-				tValue,
-			},
-		},
-	}
-	tagValue, err := json.Marshal(routingPolicyTagSetValue)
-	if err != nil {
-		t.Fatalf("Error with json Marshal: %v", err)
-	}
-
-	gpbTagSetReplace := &gpb.SetRequest{
-		Prefix: &gpb.Path{
-			Origin: "native",
-		},
-		Replace: []*gpb.Update{
-			{
-				Path: &gpb.Path{
-					Elem: []*gpb.PathElem{
-						{Name: "routing-policy"},
-						{Name: "tag-set", Key: map[string]string{"name": tName}},
-					},
-				},
-				Val: &gpb.TypedValue{
-					Value: &gpb.TypedValue_JsonIetfVal{
-						JsonIetfVal: tagValue,
-					},
-				},
-			},
-		},
-	}
-
-	gpbPolicyUpdate := &gpb.SetRequest{
-		Prefix: &gpb.Path{
-			Origin: "native",
-		},
-		Update: []*gpb.Update{
-			{
-				Path: &gpb.Path{
-					Elem: []*gpb.PathElem{
-						{Name: "routing-policy"},
-						{Name: "policy", Key: map[string]string{"name": redistributeStaticPolicy}},
-						{Name: "statement", Key: map[string]string{"name": policyStatement}},
-					},
-				},
-				Val: &gpb.TypedValue{
-					Value: &gpb.TypedValue_JsonIetfVal{
-						JsonIetfVal: tagSetStatement,
-					},
-				},
-			},
-		},
-	}
-
-	gnmiClient := dut.RawAPIs().GNMI(t)
-	if _, err := gnmiClient.Set(context.Background(), gpbTagSetReplace); err != nil {
-		t.Fatalf("Unexpected error updating SRL routing-policy tag-set: %v", err)
-	}
-	if _, err := gnmiClient.Set(context.Background(), gpbPolicyUpdate); err != nil {
-		t.Fatalf("Unexpected error updating SRL routing-policy tag-set: %v", err)
-	}
-}
-
 func configureDUTRoutingPolicy(
 	t *testing.T,
 	dut *ondatra.DUTDevice,
@@ -743,13 +550,74 @@ func configureOTG(t *testing.T, otg *otg.OTG) gosnappi.Config {
 	iDut3Bgp6Peer.Capability().SetIpv4UnicastAddPath(true).SetIpv6UnicastAddPath(true)
 	iDut3Bgp6Peer.LearnedInformationFilter().SetUnicastIpv6Prefix(true)
 
+	// ATE Traffic Configuration.
+	t.Logf("TestBGP:start ate Traffic config")
+
+	otgConfig.Flows().Clear()
+
+	// Traffic to 192.168.10.0
+	flowIpv4 := otgConfig.Flows().Add().SetName("StaticRoutesV4Flow")
+	flowIpv4.Metrics().SetEnable(true)
+	flowIpv4.TxRx().Device().
+		SetTxNames([]string{iDut1Ipv4.Name()}).
+		SetRxNames([]string{iDut2Ipv4.Name()})
+	flowIpv4.Size().SetFixed(512)
+	flowIpv4.Duration().FixedPackets().SetPackets(1000)
+	e1 := flowIpv4.Packet().Add().Ethernet()
+	e1.Src().SetValue(iDut1Eth.Mac())
+	v4 := flowIpv4.Packet().Add().Ipv4()
+	v4.Src().SetValue(iDut1Ipv4.Address())
+	v4.Dst().SetValues([]string{"192.168.10.0"})
+
+	// Traffic to 192.168.20.0
+	dropFlowIpv4 := otgConfig.Flows().Add().SetName("StaticDropRouteV4Flow")
+	dropFlowIpv4.Metrics().SetEnable(true)
+	dropFlowIpv4.TxRx().Device().
+		SetTxNames([]string{iDut3Ipv4.Name()}).
+		SetRxNames([]string{iDut2Ipv4.Name()})
+	dropFlowIpv4.Size().SetFixed(512)
+	dropFlowIpv4.Duration().FixedPackets().SetPackets(1000)
+	de1 := dropFlowIpv4.Packet().Add().Ethernet()
+	de1.Src().SetValue(iDut3Eth.Mac())
+	dv4 := dropFlowIpv4.Packet().Add().Ipv4()
+	dv4.Src().SetValue(iDut3Ipv4.Address())
+	dv4.Dst().SetValues([]string{"192.168.20.0"})
+
+	// Traffic to 2024:db8:128:128::
+	flowIpv6 := otgConfig.Flows().Add().SetName("StaticRoutesV6Flow")
+	flowIpv6.Metrics().SetEnable(true)
+	flowIpv6.TxRx().Device().
+		SetTxNames([]string{iDut1Ipv6.Name()}).
+		SetRxNames([]string{iDut2Ipv6.Name()})
+	flowIpv6.Size().SetFixed(512)
+	flowIpv6.Duration().FixedPackets().SetPackets(1000)
+	e2 := flowIpv6.Packet().Add().Ethernet()
+	e2.Src().SetValue(iDut1Eth.Mac())
+	v6 := flowIpv6.Packet().Add().Ipv6()
+	v6.Src().SetValue(iDut1Ipv6.Address())
+	v6.Dst().SetValues([]string{"2024:db8:128:128::"})
+
+	// Traffic to 2024:db8:128:128::
+	dropFlowIpv6 := otgConfig.Flows().Add().SetName("StaticDropRouteV6Flow")
+	dropFlowIpv6.Metrics().SetEnable(true)
+	dropFlowIpv6.TxRx().Device().
+		SetTxNames([]string{iDut3Ipv6.Name()}).
+		SetRxNames([]string{iDut2Ipv6.Name()})
+	dropFlowIpv6.Size().SetFixed(512)
+	dropFlowIpv6.Duration().FixedPackets().SetPackets(1000)
+	de2 := dropFlowIpv6.Packet().Add().Ethernet()
+	de2.Src().SetValue(iDut3Eth.Mac())
+	dv6 := dropFlowIpv6.Packet().Add().Ipv6()
+	dv6.Src().SetValue(iDut3Ipv6.Address())
+	dv6.Dst().SetValues([]string{"2024:db8:64:64::"})
+
 	otg.PushConfig(t, otgConfig)
 	otg.StartProtocols(t)
 
 	return otgConfig
 }
 
-func redistributeStatic(t *testing.T, dut *ondatra.DUTDevice, isV4, acceptRoute, mPropagation bool) {
+func configureTableConnection(t *testing.T, dut *ondatra.DUTDevice, isV4, mPropagation bool, importPolicy string) {
 	niPath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut))
 
 	dutOcRoot := &oc.Root{}
@@ -765,12 +633,8 @@ func redistributeStatic(t *testing.T, dut *ondatra.DUTDevice, isV4, acceptRoute,
 		af,
 	)
 
-	tc.SetImportPolicy([]string{"REJECT_ROUTE"})
-	if acceptRoute {
-		tc.SetImportPolicy([]string{"ACCEPT_ROUTE"})
-	}
+	tc.SetImportPolicy([]string{importPolicy})
 	tc.SetDisableMetricPropagation(!mPropagation)
-
 	gnmi.Update(t, dut, niPath.Config(), networkInstance)
 }
 
@@ -798,7 +662,7 @@ func redistributeStaticRouteNokia(t *testing.T, isV4 bool, mPropagation, policyR
 	return routingPolicy
 }
 
-func redistributeNokiaStatic(t *testing.T, dut *ondatra.DUTDevice, isV4, acceptRoute, mPropagation, replace bool) {
+func configureStaticRedistributionPolicy(t *testing.T, dut *ondatra.DUTDevice, isV4, acceptRoute, mPropagation, replace bool) {
 	dutOcRoot := &oc.Root{}
 	rp := dutOcRoot.GetOrCreateRoutingPolicy()
 	rp = redistributeStaticRouteNokia(t, isV4, mPropagation, !policyResultNext, rp)
@@ -830,9 +694,9 @@ func redistributeIPv4Static(t *testing.T, dut *ondatra.DUTDevice) {
 	// TODO -- guess we need a deviation for table connections; doing this for now to be lazy --
 	//  there are a lot of these in here, just commenting here for simplicity
 	if dut.Vendor() != ondatra.NOKIA {
-		redistributeStatic(t, dut, isV4, acceptRoute, !metricPropagate)
+		configureTableConnection(t, dut, isV4, !metricPropagate, "ACCEPT_ROUTE")
 	} else {
-		redistributeNokiaStatic(t, dut, isV4, acceptRoute, !metricPropagate, replace)
+		configureStaticRedistributionPolicy(t, dut, isV4, acceptRoute, !metricPropagate, replace)
 	}
 }
 
@@ -865,9 +729,9 @@ func validateRedistributeIPv4Static(t *testing.T, dut *ondatra.DUTDevice, ate *o
 
 func redistributeIPv4StaticWithMetricPropagation(t *testing.T, dut *ondatra.DUTDevice) {
 	if dut.Vendor() != ondatra.NOKIA {
-		redistributeStatic(t, dut, isV4, acceptRoute, metricPropagate)
+		configureTableConnection(t, dut, isV4, metricPropagate, "ACCEPT_ROUTE")
 	} else {
-		redistributeNokiaStatic(t, dut, isV4, acceptRoute, metricPropagate, replace)
+		configureStaticRedistributionPolicy(t, dut, isV4, acceptRoute, metricPropagate, replace)
 	}
 }
 
@@ -890,9 +754,9 @@ func validateRedistributeIPv4StaticWithMetricPropagation(t *testing.T, dut *onda
 
 func redistributeIPv6Static(t *testing.T, dut *ondatra.DUTDevice) {
 	if dut.Vendor() != ondatra.NOKIA {
-		redistributeStatic(t, dut, !isV4, acceptRoute, !metricPropagate)
+		configureTableConnection(t, dut, !isV4, !metricPropagate, "ACCEPT_ROUTE")
 	} else {
-		redistributeNokiaStatic(t, dut, !isV4, acceptRoute, !metricPropagate, replace)
+		configureStaticRedistributionPolicy(t, dut, !isV4, acceptRoute, !metricPropagate, replace)
 	}
 }
 
@@ -925,9 +789,9 @@ func validateRedistributeIPv6Static(t *testing.T, dut *ondatra.DUTDevice, ate *o
 
 func redistributeIPv6StaticWithMetricPropagation(t *testing.T, dut *ondatra.DUTDevice) {
 	if dut.Vendor() != ondatra.NOKIA {
-		redistributeStatic(t, dut, !isV4, acceptRoute, metricPropagate)
+		configureTableConnection(t, dut, !isV4, metricPropagate, "ACCEPT_ROUTE")
 	} else {
-		redistributeNokiaStatic(t, dut, !isV4, acceptRoute, metricPropagate, replace)
+		configureStaticRedistributionPolicy(t, dut, !isV4, acceptRoute, metricPropagate, replace)
 	}
 }
 
@@ -950,11 +814,11 @@ func validateRedistributeIPv6StaticWithMetricPropagation(t *testing.T, dut *onda
 
 func redistributeIPv4IPv6StaticDefaultRejectPolicy(t *testing.T, dut *ondatra.DUTDevice) {
 	if dut.Vendor() != ondatra.NOKIA {
-		redistributeStatic(t, dut, isV4, !acceptRoute, metricPropagate)
-		redistributeStatic(t, dut, !isV4, !acceptRoute, metricPropagate)
+		configureTableConnection(t, dut, isV4, metricPropagate, "REJECT_ROUTE")
+		configureTableConnection(t, dut, !isV4, metricPropagate, "REJECT_ROUTE")
 	} else {
-		redistributeNokiaStatic(t, dut, isV4, !acceptRoute, metricPropagate, replace)
-		redistributeNokiaStatic(t, dut, !isV4, !acceptRoute, metricPropagate, !replace)
+		configureStaticRedistributionPolicy(t, dut, isV4, !acceptRoute, metricPropagate, replace)
+		configureStaticRedistributionPolicy(t, dut, !isV4, !acceptRoute, metricPropagate, !replace)
 	}
 }
 
@@ -1014,7 +878,6 @@ func validateRedistributeIPv6Default(t *testing.T, dut *ondatra.DUTDevice, ate *
 }
 
 func redistributeIPv4StaticRoutePolicy(t *testing.T, dut *ondatra.DUTDevice) {
-	niPath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut))
 	policyPath := gnmi.OC().RoutingPolicy().PolicyDefinition(redistributeStaticPolicyV4)
 
 	dutOcRoot := &oc.Root{}
@@ -1055,27 +918,14 @@ func redistributeIPv4StaticRoutePolicy(t *testing.T, dut *ondatra.DUTDevice) {
 	gnmi.Replace(t, dut, policyPath.Config(), redistributePolicyDefinition)
 
 	if dut.Vendor() != ondatra.NOKIA {
-		networkInstance := dutOcRoot.GetOrCreateNetworkInstance(deviations.DefaultNetworkInstance(dut))
-
-		tc := networkInstance.GetOrCreateTableConnection(
-			oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_STATIC,
-			oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP,
-			oc.Types_ADDRESS_FAMILY_IPV4,
-		)
-		tc.SetImportPolicy([]string{"ACCEPT_ROUTE"})
-		tc.SetDisableMetricPropagation(false)
-		tc.SetImportPolicy([]string{redistributeStaticPolicyV4})
-
-		gnmi.Update(t, dut, niPath.Config(), networkInstance)
+		configureTableConnection(t, dut, isV4, metricPropagate, redistributeStaticPolicyV4)
 	} else {
-
 		bgpPath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).Protocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP, "BGP").Bgp().Neighbor(atePort1.IPv4).AfiSafi(oc.BgpTypes_AFI_SAFI_TYPE_IPV4_UNICAST).ApplyPolicy().ExportPolicy()
 		gnmi.Replace(t, dut, bgpPath.Config(), []string{redistributeStaticPolicyV4})
 	}
 }
 
 func redistributeIPv6StaticRoutePolicy(t *testing.T, dut *ondatra.DUTDevice) {
-	niPath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut))
 	policyPath := gnmi.OC().RoutingPolicy().PolicyDefinition(redistributeStaticPolicyV6)
 
 	dutOcRoot := &oc.Root{}
@@ -1116,27 +966,14 @@ func redistributeIPv6StaticRoutePolicy(t *testing.T, dut *ondatra.DUTDevice) {
 	gnmi.Replace(t, dut, policyPath.Config(), redistributePolicyDefinition)
 
 	if dut.Vendor() != ondatra.NOKIA {
-		networkInstance := dutOcRoot.GetOrCreateNetworkInstance(deviations.DefaultNetworkInstance(dut))
-
-		tc := networkInstance.GetOrCreateTableConnection(
-			oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_STATIC,
-			oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP,
-			oc.Types_ADDRESS_FAMILY_IPV6,
-		)
-		tc.SetImportPolicy([]string{"ACCEPT_ROUTE"})
-		tc.SetDisableMetricPropagation(false)
-		tc.SetImportPolicy([]string{redistributeStaticPolicyV6})
-
-		gnmi.Update(t, dut, niPath.Config(), networkInstance)
+		configureTableConnection(t, dut, !isV4, metricPropagate, redistributeStaticPolicyV6)
 	} else {
-
 		bgpPath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).Protocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP, "BGP").Bgp().Neighbor(atePort1.IPv6).AfiSafi(oc.BgpTypes_AFI_SAFI_TYPE_IPV6_UNICAST).ApplyPolicy().ExportPolicy()
 		gnmi.Replace(t, dut, bgpPath.Config(), []string{redistributeStaticPolicyV6})
 	}
 }
 
 func redistributeIPv4StaticRoutePolicyWithASN(t *testing.T, dut *ondatra.DUTDevice) {
-	niPath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut))
 	policyPath := gnmi.OC().RoutingPolicy().PolicyDefinition(redistributeStaticPolicyV4)
 
 	dutOcRoot := &oc.Root{}
@@ -1160,28 +997,14 @@ func redistributeIPv4StaticRoutePolicyWithASN(t *testing.T, dut *ondatra.DUTDevi
 	gnmi.Replace(t, dut, policyPath.Config(), redistributePolicyDefinition)
 
 	if dut.Vendor() != ondatra.NOKIA {
-		networkInstance := dutOcRoot.GetOrCreateNetworkInstance(deviations.DefaultNetworkInstance(dut))
-
-		tc := networkInstance.GetOrCreateTableConnection(
-			oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_STATIC,
-			oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP,
-			oc.Types_ADDRESS_FAMILY_IPV4,
-		)
-		tc.SetImportPolicy([]string{"ACCEPT_ROUTE"})
-		tc.SetDisableMetricPropagation(true)
-		tc.SetImportPolicy([]string{redistributeStaticPolicyV4})
-
-		gnmi.Update(t, dut, niPath.Config(), networkInstance)
+		configureTableConnection(t, dut, isV4, metricPropagate, redistributeStaticPolicyV4)
 	} else {
-
 		bgpPath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).Protocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP, "BGP").Bgp().Neighbor(atePort1.IPv4).AfiSafi(oc.BgpTypes_AFI_SAFI_TYPE_IPV4_UNICAST).ApplyPolicy().ExportPolicy()
 		gnmi.Replace(t, dut, bgpPath.Config(), []string{redistributeStaticPolicyV4})
-		// redistributeNokiaStatic(t, dut, isV4, !acceptRoute, metricPropagate)
 	}
 }
 
 func redistributeIPv6StaticRoutePolicyWithASN(t *testing.T, dut *ondatra.DUTDevice) {
-	niPath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut))
 	policyPath := gnmi.OC().RoutingPolicy().PolicyDefinition(redistributeStaticPolicyV6)
 
 	dutOcRoot := &oc.Root{}
@@ -1200,32 +1023,18 @@ func redistributeIPv6StaticRoutePolicyWithASN(t *testing.T, dut *ondatra.DUTDevi
 	ipv6PrefixPolicyStatementAction := ipv6PrefixPolicyStatement.GetOrCreateActions()
 	ipv6PrefixPolicyStatementAction.SetPolicyResult(oc.RoutingPolicy_PolicyResultType_ACCEPT_ROUTE)
 	ipv6PrefixPolicyStatementAction.GetOrCreateBgpActions().GetOrCreateSetAsPathPrepend().Asn = ygot.Uint32(64512)
-	// ipv6PrefixPolicyStatementAction.GetOrCreateBgpActions().GetOrCreateSetAsPathPrepend().SetRepeatN(1)
 
 	gnmi.Replace(t, dut, policyPath.Config(), redistributePolicyDefinition)
 
 	if dut.Vendor() != ondatra.NOKIA {
-		networkInstance := dutOcRoot.GetOrCreateNetworkInstance(deviations.DefaultNetworkInstance(dut))
-
-		tc := networkInstance.GetOrCreateTableConnection(
-			oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_STATIC,
-			oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP,
-			oc.Types_ADDRESS_FAMILY_IPV6,
-		)
-		tc.SetImportPolicy([]string{"ACCEPT_ROUTE"})
-		tc.SetDisableMetricPropagation(false)
-		tc.SetImportPolicy([]string{redistributeStaticPolicyV6})
-
-		gnmi.Update(t, dut, niPath.Config(), networkInstance)
+		configureTableConnection(t, dut, !isV4, metricPropagate, redistributeStaticPolicyV6)
 	} else {
-
 		bgpPath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).Protocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP, "BGP").Bgp().Neighbor(atePort1.IPv6).AfiSafi(oc.BgpTypes_AFI_SAFI_TYPE_IPV6_UNICAST).ApplyPolicy().ExportPolicy()
 		gnmi.Replace(t, dut, bgpPath.Config(), []string{redistributeStaticPolicyV6})
 	}
 }
 
 func redistributeIPv4StaticRoutePolicyWithMED(t *testing.T, dut *ondatra.DUTDevice) {
-	niPath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut))
 	policyPath := gnmi.OC().RoutingPolicy().PolicyDefinition(redistributeStaticPolicyV4)
 
 	dutOcRoot := &oc.Root{}
@@ -1248,27 +1057,14 @@ func redistributeIPv4StaticRoutePolicyWithMED(t *testing.T, dut *ondatra.DUTDevi
 	gnmi.Replace(t, dut, policyPath.Config(), redistributePolicyDefinition)
 
 	if dut.Vendor() != ondatra.NOKIA {
-		networkInstance := dutOcRoot.GetOrCreateNetworkInstance(deviations.DefaultNetworkInstance(dut))
-
-		tc := networkInstance.GetOrCreateTableConnection(
-			oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_STATIC,
-			oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP,
-			oc.Types_ADDRESS_FAMILY_IPV4,
-		)
-		tc.SetImportPolicy([]string{"ACCEPT_ROUTE"})
-		tc.SetDisableMetricPropagation(false)
-		tc.SetImportPolicy([]string{redistributeStaticPolicyV4})
-
-		gnmi.Update(t, dut, niPath.Config(), networkInstance)
+		configureTableConnection(t, dut, isV4, metricPropagate, redistributeStaticPolicyV4)
 	} else {
-
 		bgpPath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).Protocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP, "BGP").Bgp().Neighbor(atePort1.IPv4).AfiSafi(oc.BgpTypes_AFI_SAFI_TYPE_IPV4_UNICAST).ApplyPolicy().ExportPolicy()
 		gnmi.Replace(t, dut, bgpPath.Config(), []string{redistributeStaticPolicyV4})
 	}
 }
 
 func redistributeIPv6StaticRoutePolicyWithMED(t *testing.T, dut *ondatra.DUTDevice) {
-	niPath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut))
 	policyPath := gnmi.OC().RoutingPolicy().PolicyDefinition(redistributeStaticPolicyV6)
 
 	dutOcRoot := &oc.Root{}
@@ -1291,27 +1087,14 @@ func redistributeIPv6StaticRoutePolicyWithMED(t *testing.T, dut *ondatra.DUTDevi
 	gnmi.Replace(t, dut, policyPath.Config(), redistributePolicyDefinition)
 
 	if dut.Vendor() != ondatra.NOKIA {
-		networkInstance := dutOcRoot.GetOrCreateNetworkInstance(deviations.DefaultNetworkInstance(dut))
-
-		tc := networkInstance.GetOrCreateTableConnection(
-			oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_STATIC,
-			oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP,
-			oc.Types_ADDRESS_FAMILY_IPV6,
-		)
-		tc.SetImportPolicy([]string{"ACCEPT_ROUTE"})
-		tc.SetDisableMetricPropagation(false)
-		tc.SetImportPolicy([]string{redistributeStaticPolicyV6})
-
-		gnmi.Update(t, dut, niPath.Config(), networkInstance)
+		configureTableConnection(t, dut, !isV4, metricPropagate, redistributeStaticPolicyV6)
 	} else {
-
 		bgpPath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).Protocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP, "BGP").Bgp().Neighbor(atePort1.IPv6).AfiSafi(oc.BgpTypes_AFI_SAFI_TYPE_IPV6_UNICAST).ApplyPolicy().ExportPolicy()
 		gnmi.Replace(t, dut, bgpPath.Config(), []string{redistributeStaticPolicyV6})
 	}
 }
 
 func redistributeIPv4StaticRoutePolicyWithLocalPreference(t *testing.T, dut *ondatra.DUTDevice) {
-	niPath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut))
 	policyPath := gnmi.OC().RoutingPolicy().PolicyDefinition(redistributeStaticPolicyV4)
 
 	dutOcRoot := &oc.Root{}
@@ -1334,27 +1117,28 @@ func redistributeIPv4StaticRoutePolicyWithLocalPreference(t *testing.T, dut *ond
 	gnmi.Replace(t, dut, policyPath.Config(), redistributePolicyDefinition)
 
 	if dut.Vendor() != ondatra.NOKIA {
-		networkInstance := dutOcRoot.GetOrCreateNetworkInstance(deviations.DefaultNetworkInstance(dut))
+		configureTableConnection(t, dut, isV4, metricPropagate, redistributeStaticPolicyV4)
+		/*
+			networkInstance := dutOcRoot.GetOrCreateNetworkInstance(deviations.DefaultNetworkInstance(dut))
 
-		tc := networkInstance.GetOrCreateTableConnection(
-			oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_STATIC,
-			oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP,
-			oc.Types_ADDRESS_FAMILY_IPV4,
-		)
-		tc.SetImportPolicy([]string{"ACCEPT_ROUTE"})
-		tc.SetDisableMetricPropagation(true)
-		tc.SetImportPolicy([]string{redistributeStaticPolicyV4})
+			tc := networkInstance.GetOrCreateTableConnection(
+				oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_STATIC,
+				oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP,
+				oc.Types_ADDRESS_FAMILY_IPV4,
+			)
+			tc.SetImportPolicy([]string{"ACCEPT_ROUTE"})
+			tc.SetDisableMetricPropagation(true)
+			tc.SetImportPolicy([]string{redistributeStaticPolicyV4})
 
-		gnmi.Update(t, dut, niPath.Config(), networkInstance)
+			gnmi.Update(t, dut, niPath.Config(), networkInstance)
+		*/
 	} else {
-
 		bgpPath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).Protocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP, "BGP").Bgp().Neighbor(atePort3.IPv4).AfiSafi(oc.BgpTypes_AFI_SAFI_TYPE_IPV4_UNICAST).ApplyPolicy().ExportPolicy()
 		gnmi.Replace(t, dut, bgpPath.Config(), []string{redistributeStaticPolicyV4})
 	}
 }
 
 func redistributeIPv6StaticRoutePolicyWithLocalPreference(t *testing.T, dut *ondatra.DUTDevice) {
-	niPath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut))
 	policyPath := gnmi.OC().RoutingPolicy().PolicyDefinition(redistributeStaticPolicyV6)
 
 	dutOcRoot := &oc.Root{}
@@ -1377,27 +1161,14 @@ func redistributeIPv6StaticRoutePolicyWithLocalPreference(t *testing.T, dut *ond
 	gnmi.Replace(t, dut, policyPath.Config(), redistributePolicyDefinition)
 
 	if dut.Vendor() != ondatra.NOKIA {
-		networkInstance := dutOcRoot.GetOrCreateNetworkInstance(deviations.DefaultNetworkInstance(dut))
-
-		tc := networkInstance.GetOrCreateTableConnection(
-			oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_STATIC,
-			oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP,
-			oc.Types_ADDRESS_FAMILY_IPV6,
-		)
-		tc.SetImportPolicy([]string{"ACCEPT_ROUTE"})
-		tc.SetDisableMetricPropagation(true)
-		tc.SetImportPolicy([]string{redistributeStaticPolicyV6})
-
-		gnmi.Update(t, dut, niPath.Config(), networkInstance)
+		configureTableConnection(t, dut, !isV4, metricPropagate, redistributeStaticPolicyV6)
 	} else {
-
 		bgpPath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).Protocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP, "BGP").Bgp().Neighbor(atePort3.IPv6).AfiSafi(oc.BgpTypes_AFI_SAFI_TYPE_IPV6_UNICAST).ApplyPolicy().ExportPolicy()
 		gnmi.Replace(t, dut, bgpPath.Config(), []string{redistributeStaticPolicyV6})
 	}
 }
 
 func redistributeIPv4StaticRoutePolicyWithCommunitySet(t *testing.T, dut *ondatra.DUTDevice) {
-	niPath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut))
 	policyPath := gnmi.OC().RoutingPolicy().PolicyDefinition(redistributeStaticPolicyV4)
 	communityPath := gnmi.OC().RoutingPolicy().DefinedSets().BgpDefinedSets().CommunitySet("community-set-v4")
 
@@ -1429,28 +1200,14 @@ func redistributeIPv4StaticRoutePolicyWithCommunitySet(t *testing.T, dut *ondatr
 	gnmi.Replace(t, dut, policyPath.Config(), redistributePolicyDefinition)
 
 	if dut.Vendor() != ondatra.NOKIA {
-		networkInstance := dutOcRoot.GetOrCreateNetworkInstance(deviations.DefaultNetworkInstance(dut))
-
-		tc := networkInstance.GetOrCreateTableConnection(
-			oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_STATIC,
-			oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP,
-			oc.Types_ADDRESS_FAMILY_IPV4,
-		)
-		tc.SetImportPolicy([]string{"ACCEPT_ROUTE"})
-		tc.SetDisableMetricPropagation(true)
-		tc.SetImportPolicy([]string{redistributeStaticPolicyV4})
-
-		gnmi.Update(t, dut, niPath.Config(), networkInstance)
+		configureTableConnection(t, dut, isV4, metricPropagate, redistributeStaticPolicyV4)
 	} else {
-
 		bgpPath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).Protocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP, "BGP").Bgp().Neighbor(atePort3.IPv4).AfiSafi(oc.BgpTypes_AFI_SAFI_TYPE_IPV4_UNICAST).ApplyPolicy().ExportPolicy()
 		gnmi.Replace(t, dut, bgpPath.Config(), []string{redistributeStaticPolicyV4})
-		// redistributeNokiaStatic(t, dut, isV4, !acceptRoute, metricPropagate)
 	}
 }
 
 func redistributeIPv6StaticRoutePolicyWithCommunitySet(t *testing.T, dut *ondatra.DUTDevice) {
-	niPath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut))
 	policyPath := gnmi.OC().RoutingPolicy().PolicyDefinition(redistributeStaticPolicyV6)
 	communityPath := gnmi.OC().RoutingPolicy().DefinedSets().BgpDefinedSets().CommunitySet("community-set-v6")
 
@@ -1482,20 +1239,8 @@ func redistributeIPv6StaticRoutePolicyWithCommunitySet(t *testing.T, dut *ondatr
 	gnmi.Replace(t, dut, policyPath.Config(), redistributePolicyDefinition)
 
 	if dut.Vendor() != ondatra.NOKIA {
-		networkInstance := dutOcRoot.GetOrCreateNetworkInstance(deviations.DefaultNetworkInstance(dut))
-
-		tc := networkInstance.GetOrCreateTableConnection(
-			oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_STATIC,
-			oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP,
-			oc.Types_ADDRESS_FAMILY_IPV6,
-		)
-		tc.SetImportPolicy([]string{"ACCEPT_ROUTE"})
-		tc.SetDisableMetricPropagation(true)
-		tc.SetImportPolicy([]string{redistributeStaticPolicyV6})
-
-		gnmi.Update(t, dut, niPath.Config(), networkInstance)
+		configureTableConnection(t, dut, !isV4, metricPropagate, redistributeStaticPolicyV6)
 	} else {
-
 		bgpPath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).Protocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP, "BGP").Bgp().Neighbor(atePort3.IPv6).AfiSafi(oc.BgpTypes_AFI_SAFI_TYPE_IPV6_UNICAST).ApplyPolicy().ExportPolicy()
 		gnmi.Replace(t, dut, bgpPath.Config(), []string{redistributeStaticPolicyV6})
 	}
@@ -1518,7 +1263,6 @@ func redistributeIPv6StaticRoutePolicyWithMatchedTagSet(t *testing.T, dut *ondat
 }
 
 func redistributeIPv4StaticRoutePolicyWithTagSet(t *testing.T, dut *ondatra.DUTDevice, tagSetValue uint32) {
-	niPath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut))
 	policyPath := gnmi.OC().RoutingPolicy().PolicyDefinition(redistributeStaticPolicyV4)
 	tagSetPath := gnmi.OC().RoutingPolicy().DefinedSets().TagSet("tag-set-v4")
 
@@ -1529,7 +1273,7 @@ func redistributeIPv4StaticRoutePolicyWithTagSet(t *testing.T, dut *ondatra.DUTD
 	if dut.Vendor() == ondatra.NOKIA {
 		redistributePolicy = redistributeStaticRouteNokia(t, isV4, !metricPropagate, policyResultNext, redistributePolicy)
 		gnmi.Replace(t, dut, policyPath.Config(), redistributePolicyDefinition)
-		configureTagSet(t, dut, isV4, tagSetValue)
+		configureRoutingPolicyTagSet(t, dut, isV4, tagSetValue)
 		bgpPath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).Protocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP, "BGP").Bgp().Neighbor(atePort1.IPv4).AfiSafi(oc.BgpTypes_AFI_SAFI_TYPE_IPV4_UNICAST).ApplyPolicy().ExportPolicy()
 		gnmi.Replace(t, dut, bgpPath.Config(), []string{redistributeStaticPolicyV4})
 	} else {
@@ -1550,25 +1294,13 @@ func redistributeIPv4StaticRoutePolicyWithTagSet(t *testing.T, dut *ondatra.DUTD
 		ipv4PrefixPolicyStatementCondition.GetOrCreateMatchTagSet().SetTagSet("tag-set-v4")
 		ipv4PrefixPolicyStatementAction := ipv4PrefixPolicyStatement.GetOrCreateActions()
 		ipv4PrefixPolicyStatementAction.SetPolicyResult(oc.RoutingPolicy_PolicyResultType_ACCEPT_ROUTE)
-
 		gnmi.Replace(t, dut, policyPath.Config(), redistributePolicyDefinition)
 
-		networkInstance := dutOcRoot.GetOrCreateNetworkInstance(deviations.DefaultNetworkInstance(dut))
-
-		tc := networkInstance.GetOrCreateTableConnection(
-			oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_STATIC,
-			oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP,
-			oc.Types_ADDRESS_FAMILY_IPV4,
-		)
-		tc.SetDisableMetricPropagation(true)
-		tc.SetImportPolicy([]string{redistributeStaticPolicyV4})
-
-		gnmi.Update(t, dut, niPath.Config(), networkInstance)
+		configureTableConnection(t, dut, isV4, !metricPropagate, redistributeStaticPolicyV4)
 	}
 }
 
 func redistributeIPv6StaticRoutePolicyWithTagSet(t *testing.T, dut *ondatra.DUTDevice, tagSetValue uint32) {
-	niPath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut))
 	policyPath := gnmi.OC().RoutingPolicy().PolicyDefinition(redistributeStaticPolicyV6)
 	tagSetPath := gnmi.OC().RoutingPolicy().DefinedSets().TagSet("tag-set-v6")
 
@@ -1579,7 +1311,7 @@ func redistributeIPv6StaticRoutePolicyWithTagSet(t *testing.T, dut *ondatra.DUTD
 	if dut.Vendor() == ondatra.NOKIA {
 		redistributePolicy = redistributeStaticRouteNokia(t, !isV4, !metricPropagate, policyResultNext, redistributePolicy)
 		gnmi.Replace(t, dut, policyPath.Config(), redistributePolicyDefinition)
-		configureTagSet(t, dut, !isV4, tagSetValue)
+		configureRoutingPolicyTagSet(t, dut, !isV4, tagSetValue)
 		bgpPath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).Protocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP, "BGP").Bgp().Neighbor(atePort1.IPv6).AfiSafi(oc.BgpTypes_AFI_SAFI_TYPE_IPV6_UNICAST).ApplyPolicy().ExportPolicy()
 		gnmi.Replace(t, dut, bgpPath.Config(), []string{redistributeStaticPolicyV6})
 	} else {
@@ -1600,26 +1332,14 @@ func redistributeIPv6StaticRoutePolicyWithTagSet(t *testing.T, dut *ondatra.DUTD
 		ipv6PrefixPolicyStatementCondition.GetOrCreateMatchTagSet().SetTagSet("tag-set-v6")
 		ipv6PrefixPolicyStatementAction := ipv6PrefixPolicyStatement.GetOrCreateActions()
 		ipv6PrefixPolicyStatementAction.SetPolicyResult(oc.RoutingPolicy_PolicyResultType_ACCEPT_ROUTE)
-
 		gnmi.Replace(t, dut, policyPath.Config(), redistributePolicyDefinition)
 
-		networkInstance := dutOcRoot.GetOrCreateNetworkInstance(deviations.DefaultNetworkInstance(dut))
-
-		tc := networkInstance.GetOrCreateTableConnection(
-			oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_STATIC,
-			oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP,
-			oc.Types_ADDRESS_FAMILY_IPV6,
-		)
-		tc.SetDisableMetricPropagation(true)
-		tc.SetImportPolicy([]string{redistributeStaticPolicyV6})
-
-		gnmi.Update(t, dut, niPath.Config(), networkInstance)
+		configureTableConnection(t, dut, !isV4, !metricPropagate, redistributeStaticPolicyV6)
 	}
 }
 
 func redistributeIPv4NullStaticRoute(t *testing.T, dut *ondatra.DUTDevice) {
 
-	niPath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut))
 	policyPath := gnmi.OC().RoutingPolicy().PolicyDefinition(redistributeStaticPolicyV4)
 	staticPath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).Protocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_STATIC, "static")
 	dutOcRoot := &oc.Root{}
@@ -1665,21 +1385,12 @@ func redistributeIPv4NullStaticRoute(t *testing.T, dut *ondatra.DUTDevice) {
 		ipv4PrefixPolicyStatementAction.SetPolicyResult(oc.RoutingPolicy_PolicyResultType_ACCEPT_ROUTE)
 		gnmi.Replace(t, dut, policyPath.Config(), redistributePolicyDefinition)
 
-		tc := networkInstance.GetOrCreateTableConnection(
-			oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_STATIC,
-			oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP,
-			oc.Types_ADDRESS_FAMILY_IPV4,
-		)
-		tc.SetDisableMetricPropagation(true)
-		tc.SetImportPolicy([]string{redistributeStaticPolicyV4})
-
-		gnmi.Update(t, dut, niPath.Config(), networkInstance)
+		configureTableConnection(t, dut, isV4, !metricPropagate, redistributeStaticPolicyV4)
 	}
 }
 
 func redistributeIPv6NullStaticRoute(t *testing.T, dut *ondatra.DUTDevice) {
 
-	niPath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut))
 	policyPath := gnmi.OC().RoutingPolicy().PolicyDefinition(redistributeStaticPolicyV6)
 	staticPath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).Protocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_STATIC, "static")
 	dutOcRoot := &oc.Root{}
@@ -1725,15 +1436,7 @@ func redistributeIPv6NullStaticRoute(t *testing.T, dut *ondatra.DUTDevice) {
 		ipv6PrefixPolicyStatementAction.SetPolicyResult(oc.RoutingPolicy_PolicyResultType_ACCEPT_ROUTE)
 		gnmi.Replace(t, dut, policyPath.Config(), redistributePolicyDefinition)
 
-		tc := networkInstance.GetOrCreateTableConnection(
-			oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_STATIC,
-			oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP,
-			oc.Types_ADDRESS_FAMILY_IPV6,
-		)
-		tc.SetDisableMetricPropagation(true)
-		tc.SetImportPolicy([]string{redistributeStaticPolicyV6})
-
-		gnmi.Update(t, dut, niPath.Config(), networkInstance)
+		configureTableConnection(t, dut, !isV4, !metricPropagate, redistributeStaticPolicyV6)
 	}
 }
 
@@ -1749,6 +1452,38 @@ func validateIPv6RouteWithTagSetReject(t *testing.T, dut *ondatra.DUTDevice, ate
 }
 func validateIPv6RouteWithTagSetAccept(t *testing.T, dut *ondatra.DUTDevice, ate *ondatra.ATEDevice) {
 	validateRedistributeIPv6RouteWithTagSet(t, dut, ate, true)
+}
+
+func validateIPv4RouteWithMED(t *testing.T, dut *ondatra.DUTDevice, ate *ondatra.ATEDevice) {
+	validateLearnedIPv4Prefix(t, ate, atePort1.Name+".BGP4.peer", "192.168.10.0", 1000, true)
+}
+
+func validateIPv6RouteWithMED(t *testing.T, dut *ondatra.DUTDevice, ate *ondatra.ATEDevice) {
+	validateLearnedIPv6Prefix(t, ate, atePort1.Name+".BGP6.peer", "2024:db8:128:128::", 1000, true)
+}
+
+func validateIPv4RouteWithASN(t *testing.T, dut *ondatra.DUTDevice, ate *ondatra.ATEDevice) {
+	validateIPv4PrefixASN(t, ate, atePort1.Name+".BGP4.peer", "192.168.10.0", []uint32{64512, 65499, 65499, 65499})
+}
+
+func validateIPv6RouteWithASN(t *testing.T, dut *ondatra.DUTDevice, ate *ondatra.ATEDevice) {
+	validateIPv6PrefixASN(t, ate, atePort1.Name+".BGP6.peer", "2024:db8:128:128::", []uint32{64512, 64512})
+}
+
+func validateIPv4RouteWithLocalPreference(t *testing.T, dut *ondatra.DUTDevice, ate *ondatra.ATEDevice) {
+	validateIPv4PrefixLocalPreference(t, ate, atePort3.Name+".BGP4.peer", "192.168.10.0", 100)
+}
+
+func validateIPv6RouteWithLocalPreference(t *testing.T, dut *ondatra.DUTDevice, ate *ondatra.ATEDevice) {
+	validateIPv6PrefixLocalPreference(t, ate, atePort3.Name+".BGP6.peer", "2024:db8:128:128::", 100)
+}
+
+func validateIPv4RouteWithCommunitySet(t *testing.T, dut *ondatra.DUTDevice, ate *ondatra.ATEDevice) {
+	validateIPv4PrefixCommunitySet(t, ate, atePort3.Name+".BGP4.peer", "192.168.10.0", "64512:100")
+}
+
+func validateIPv6RouteWithCommunitySet(t *testing.T, dut *ondatra.DUTDevice, ate *ondatra.ATEDevice) {
+	validateIPv6PrefixCommunitySet(t, ate, atePort3.Name+".BGP6.peer", "2024:db8:128:128::", "64512:100")
 }
 
 func validateRedistributeIPv4RouteWithTagSet(t *testing.T, dut *ondatra.DUTDevice, ate *ondatra.ATEDevice, shouldBePresent bool) {
@@ -1968,38 +1703,6 @@ func validateRedistributeIPv4RoutePolicy(t *testing.T, dut *ondatra.DUTDevice, a
 
 	// we should no longer see these prefixes on either peering session
 	validateLearnedIPv4Prefix(t, ate, atePort1.Name+".BGP4.peer", "192.168.10.0", 0, true)
-}
-
-func validateIPv4RouteWithMED(t *testing.T, dut *ondatra.DUTDevice, ate *ondatra.ATEDevice) {
-	validateLearnedIPv4Prefix(t, ate, atePort1.Name+".BGP4.peer", "192.168.10.0", 1000, true)
-}
-
-func validateIPv6RouteWithMED(t *testing.T, dut *ondatra.DUTDevice, ate *ondatra.ATEDevice) {
-	validateLearnedIPv6Prefix(t, ate, atePort1.Name+".BGP6.peer", "2024:db8:128:128::", 1000, true)
-}
-
-func validateIPv4RouteWithASN(t *testing.T, dut *ondatra.DUTDevice, ate *ondatra.ATEDevice) {
-	validateIPv4PrefixASN(t, ate, atePort1.Name+".BGP4.peer", "192.168.10.0", []uint32{64512, 65499, 65499, 65499})
-}
-
-func validateIPv6RouteWithASN(t *testing.T, dut *ondatra.DUTDevice, ate *ondatra.ATEDevice) {
-	validateIPv6PrefixASN(t, ate, atePort1.Name+".BGP6.peer", "2024:db8:128:128::", []uint32{64512, 64512})
-}
-
-func validateIPv4RouteWithLocalPreference(t *testing.T, dut *ondatra.DUTDevice, ate *ondatra.ATEDevice) {
-	validateIPv4PrefixLocalPreference(t, ate, atePort3.Name+".BGP4.peer", "192.168.10.0", 100)
-}
-
-func validateIPv6RouteWithLocalPreference(t *testing.T, dut *ondatra.DUTDevice, ate *ondatra.ATEDevice) {
-	validateIPv6PrefixLocalPreference(t, ate, atePort3.Name+".BGP6.peer", "2024:db8:128:128::", 100)
-}
-
-func validateIPv4RouteWithCommunitySet(t *testing.T, dut *ondatra.DUTDevice, ate *ondatra.ATEDevice) {
-	validateIPv4PrefixCommunitySet(t, ate, atePort3.Name+".BGP4.peer", "192.168.10.0", "64512:100")
-}
-
-func validateIPv6RouteWithCommunitySet(t *testing.T, dut *ondatra.DUTDevice, ate *ondatra.ATEDevice) {
-	validateIPv6PrefixCommunitySet(t, ate, atePort3.Name+".BGP6.peer", "2024:db8:128:128::", "64512:100")
 }
 
 func validateIPv4PrefixASN(t *testing.T, ate *ondatra.ATEDevice, bgpPeerName, subnet string, wantASPath []uint32) {
@@ -2238,5 +1941,201 @@ func TestBGPStaticRouteRedistribution(t *testing.T) {
 				tc.cleanup(t, dut)
 			}
 		})
+	}
+}
+
+// Function using native-yang to attach tag-set to static-route
+func attachTagSetToStaticRoute(t *testing.T, dut *ondatra.DUTDevice, prefix, tagPolicy string) {
+
+	tagValue, err := json.Marshal(tagPolicy)
+	if err != nil {
+		t.Fatalf("Error with json Marshal: %v", err)
+	}
+
+	gpbSetRequest := &gpb.SetRequest{
+		Prefix: &gpb.Path{
+			Origin: "native",
+		},
+		Update: []*gpb.Update{
+			{
+				Path: &gpb.Path{
+					Elem: []*gpb.PathElem{
+						{Name: "network-instance", Key: map[string]string{"name": "DEFAULT"}},
+						{Name: "static-routes"},
+						{Name: "route", Key: map[string]string{"prefix": prefix}},
+						{Name: "tag-set"},
+					},
+				},
+				Val: &gpb.TypedValue{
+					Value: &gpb.TypedValue_JsonIetfVal{
+						JsonIetfVal: tagValue,
+					},
+				},
+			},
+		},
+	}
+
+	gnmiClient := dut.RawAPIs().GNMI(t)
+	if _, err := gnmiClient.Set(context.Background(), gpbSetRequest); err != nil {
+		t.Fatalf("Unexpected error updating SRL static-route tag-set: %v", err)
+	}
+
+}
+
+// Function using native-yang to configure tag-set used by static-route
+func configureStaticRouteTagSet(t *testing.T, dut *ondatra.DUTDevice) {
+
+	var routingPolicyTagSetValueV4 = []any{
+		map[string]any{
+			"tag-value": []any{
+				40,
+			},
+		},
+	}
+	tagValueV4, err := json.Marshal(routingPolicyTagSetValueV4)
+	if err != nil {
+		t.Fatalf("Error with json Marshal: %v", err)
+	}
+	var routingPolicyTagSetValueV6 = []any{
+		map[string]any{
+			"tag-value": []any{
+				60,
+			},
+		},
+	}
+	tagValueV6, err := json.Marshal(routingPolicyTagSetValueV6)
+	if err != nil {
+		t.Fatalf("Error with json Marshal: %v", err)
+	}
+
+	gpbSetRequest := &gpb.SetRequest{
+		Prefix: &gpb.Path{
+			Origin: "native",
+		},
+		Update: []*gpb.Update{
+			{
+				Path: &gpb.Path{
+					Elem: []*gpb.PathElem{
+						{Name: "routing-policy"},
+						{Name: "tag-set", Key: map[string]string{"name": "tag-static-v4"}},
+					},
+				},
+				Val: &gpb.TypedValue{
+					Value: &gpb.TypedValue_JsonIetfVal{
+						JsonIetfVal: tagValueV4,
+					},
+				},
+			},
+			{
+				Path: &gpb.Path{
+					Elem: []*gpb.PathElem{
+						{Name: "routing-policy"},
+						{Name: "tag-set", Key: map[string]string{"name": "tag-static-v6"}},
+					},
+				},
+				Val: &gpb.TypedValue{
+					Value: &gpb.TypedValue_JsonIetfVal{
+						JsonIetfVal: tagValueV6,
+					},
+				},
+			},
+		},
+	}
+
+	gnmiClient := dut.RawAPIs().GNMI(t)
+	if _, err := gnmiClient.Set(context.Background(), gpbSetRequest); err != nil {
+		t.Fatalf("Unexpected error updating SRL routing-policy tag-set for static-route: %v", err)
+	}
+}
+
+// Function using native-yang to configure tag-set with routing-policy
+func configureRoutingPolicyTagSet(t *testing.T, dut *ondatra.DUTDevice, isV4 bool, tValue uint32) {
+
+	tName := "tag-set-v4"
+	redistributeStaticPolicy := redistributeStaticPolicyV4
+	policyStatement := policyStatementV4
+	if !isV4 {
+		tName = "tag-set-v6"
+		redistributeStaticPolicy = redistributeStaticPolicyV6
+		policyStatement = policyStatementV6
+	}
+
+	var routingPolicyTagSet = []any{
+		map[string]any{
+			"match": map[string]any{
+				"internal-tags": map[string]any{
+					"tag-set": []string{tName},
+				},
+			},
+			"action": map[string]any{
+				"policy-result": "accept",
+			},
+		},
+	}
+	tagSetStatement, err := json.Marshal(routingPolicyTagSet)
+	if err != nil {
+		t.Fatalf("Error with json Marshal: %v", err)
+	}
+	var routingPolicyTagSetValue = []any{
+		map[string]any{
+			"tag-value": []any{
+				tValue,
+			},
+		},
+	}
+	tagValue, err := json.Marshal(routingPolicyTagSetValue)
+	if err != nil {
+		t.Fatalf("Error with json Marshal: %v", err)
+	}
+
+	gpbTagSetReplace := &gpb.SetRequest{
+		Prefix: &gpb.Path{
+			Origin: "native",
+		},
+		Replace: []*gpb.Update{
+			{
+				Path: &gpb.Path{
+					Elem: []*gpb.PathElem{
+						{Name: "routing-policy"},
+						{Name: "tag-set", Key: map[string]string{"name": tName}},
+					},
+				},
+				Val: &gpb.TypedValue{
+					Value: &gpb.TypedValue_JsonIetfVal{
+						JsonIetfVal: tagValue,
+					},
+				},
+			},
+		},
+	}
+
+	gpbPolicyUpdate := &gpb.SetRequest{
+		Prefix: &gpb.Path{
+			Origin: "native",
+		},
+		Update: []*gpb.Update{
+			{
+				Path: &gpb.Path{
+					Elem: []*gpb.PathElem{
+						{Name: "routing-policy"},
+						{Name: "policy", Key: map[string]string{"name": redistributeStaticPolicy}},
+						{Name: "statement", Key: map[string]string{"name": policyStatement}},
+					},
+				},
+				Val: &gpb.TypedValue{
+					Value: &gpb.TypedValue_JsonIetfVal{
+						JsonIetfVal: tagSetStatement,
+					},
+				},
+			},
+		},
+	}
+
+	gnmiClient := dut.RawAPIs().GNMI(t)
+	if _, err := gnmiClient.Set(context.Background(), gpbTagSetReplace); err != nil {
+		t.Fatalf("Unexpected error updating SRL routing-policy tag-set: %v", err)
+	}
+	if _, err := gnmiClient.Set(context.Background(), gpbPolicyUpdate); err != nil {
+		t.Fatalf("Unexpected error updating SRL routing-policy tag-set: %v", err)
 	}
 }
