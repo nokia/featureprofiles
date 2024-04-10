@@ -27,13 +27,6 @@ func TestMain(m *testing.M) {
 	fptest.RunTests(m)
 }
 
-type testCase struct {
-	name     string
-	setup    func(t *testing.T, dut *ondatra.DUTDevice, ate *ondatra.ATEDevice)
-	validate func(t *testing.T, dut *ondatra.DUTDevice, ate *ondatra.ATEDevice)
-	cleanup  func(t *testing.T, dut *ondatra.DUTDevice)
-}
-
 const (
 	ipv4PrefixLen              = 30
 	ipv6PrefixLen              = 126
@@ -122,156 +115,6 @@ var (
 		"port1": dutPort1,
 		"port2": dutPort2,
 		"port3": dutPort3,
-	}
-
-	testCases = []testCase{
-		// 1.27-1
-		{
-			name:     "(1.27.1) redistribute-ipv4-static-routes-with-metric-propagation-disabled",
-			setup:    redistributeIPv4Static,
-			validate: validateRedistributeIPv4Static,
-			cleanup:  nil,
-		},
-		// 1.27-2
-		{
-			name:     "(1.27.2) redistribute-ipv4-static-routes-with-metric-propagation-enabled",
-			setup:    redistributeIPv4StaticWithMetricPropagation,
-			validate: validateRedistributeIPv4StaticWithMetricPropagation,
-			cleanup:  nil,
-		},
-		// 1.27-3
-		{
-			name:     "(1.27.3) redistribute-ipv6-static-routes-with-metric-propagation-disabled",
-			setup:    redistributeIPv6Static,
-			validate: validateRedistributeIPv6Static,
-			cleanup:  nil,
-		},
-		// 1.27-4
-		{
-			name:     "(1.27.4) redistribute-ipv6-static-routes-with-metric-propagation-enabled",
-			setup:    redistributeIPv6StaticWithMetricPropagation,
-			validate: validateRedistributeIPv6StaticWithMetricPropagation,
-			cleanup:  nil,
-		},
-		// 1.27-5
-		{
-			name:     "(1.27.5) redistribute-ipv4-ipv6-default-reject-policy",
-			setup:    redistributeIPv4IPv6StaticDefaultRejectPolicy,
-			validate: validateRedistributeIPv4IPv6DefaultRejectPolicy,
-			cleanup:  nil,
-		},
-		// 1.27-6
-		{
-			name:     "(1.27.6) redistribute-ipv4-route-policy",
-			setup:    redistributeIPv4StaticRoutePolicy,
-			validate: validateRedistributeIPv4Default,
-			cleanup:  nil,
-		},
-		// 1.27-7
-		{
-			name:     "(1.27.7) redistribute-ipv4-route-policy-as-prepend",
-			setup:    redistributeIPv4StaticRoutePolicyWithASN,
-			validate: validateIPv4RouteWithASN,
-			cleanup:  nil,
-		},
-		// 1.27-8
-		{
-			name:     "(1.27.8) redistribute-ipv4-route-policy-med",
-			setup:    redistributeIPv4StaticRoutePolicyWithMED,
-			validate: validateIPv4RouteWithMED,
-			cleanup:  nil,
-		},
-		// 1.27-9
-		{
-			name:     "(1.27.9) redistribute-ipv4-route-policy-local-preference",
-			setup:    redistributeIPv4StaticRoutePolicyWithLocalPreference,
-			validate: validateIPv4RouteWithLocalPreference,
-			cleanup:  nil,
-		},
-		// 1.27-10
-		{
-			name:     "(1.27.10) redistribute-ipv4-route-policy-community-set",
-			setup:    redistributeIPv4StaticRoutePolicyWithCommunitySet,
-			validate: validateIPv4RouteWithCommunitySet,
-			cleanup:  nil,
-		},
-		// 1.27-12
-		{
-			name:     "(1.27.12) redistribute-ipv4-route-policy-unmatched-tag",
-			setup:    redistributeIPv4StaticRoutePolicyWithUnmatchedTagSet,
-			validate: validateIPv4RouteWithTagSetReject,
-			cleanup:  nil,
-		},
-		// 1.27-13
-		{
-			name:     "(1.27.13) redistribute-ipv4-route-policy-matched-set",
-			setup:    redistributeIPv4StaticRoutePolicyWithMatchedTagSet,
-			validate: validateIPv4RouteWithTagSetAccept,
-			cleanup:  nil,
-		},
-		// 1.27-14
-		{
-			name:     "(1.27.14) redistribute-ipv4-route-policy-nexthop",
-			setup:    redistributeIPv4NullStaticRoute,
-			validate: validateRedistributeIPv4NullStaticRoute,
-			cleanup:  nil,
-		},
-		// 1.27-15
-		{
-			name:     "(1.27.15) redistribute-ipv6-route-policy",
-			setup:    redistributeIPv6StaticRoutePolicy,
-			validate: validateRedistributeIPv6Default,
-			cleanup:  nil,
-		},
-		// 1.27-16
-		{
-			name:     "(1.27.16) redistribute-ipv6-route-policy-as-prepend",
-			setup:    redistributeIPv6StaticRoutePolicyWithASN,
-			validate: validateIPv6RouteWithASN,
-			cleanup:  nil,
-		},
-		// 1.27-17
-		{
-			name:     "(1.27.17) redistribute-ipv6-route-policy-med",
-			setup:    redistributeIPv6StaticRoutePolicyWithMED,
-			validate: validateIPv6RouteWithMED,
-			cleanup:  nil,
-		},
-		// 1.27-18
-		{
-			name:     "(1.27.18) redistribute-ipv6-route-policy-local-preference",
-			setup:    redistributeIPv6StaticRoutePolicyWithLocalPreference,
-			validate: validateIPv6RouteWithLocalPreference,
-			cleanup:  nil,
-		},
-		// 1.27-19
-		{
-			name:     "(1.27.19) redistribute-ipv6-route-policy-community-set",
-			setup:    redistributeIPv6StaticRoutePolicyWithCommunitySet,
-			validate: validateIPv6RouteWithCommunitySet,
-			cleanup:  nil,
-		},
-		// 1.27-20
-		{
-			name:     "(1.27.20) redistribute-ipv6-route-policy-unmatched-tag",
-			setup:    redistributeIPv6StaticRoutePolicyWithUnmatchedTagSet,
-			validate: validateIPv6RouteWithTagSetReject,
-			cleanup:  nil,
-		},
-		// 1.27-21
-		{
-			name:     "(1.27.21) redistribute-ipv6-route-policy-matched-set",
-			setup:    redistributeIPv6StaticRoutePolicyWithMatchedTagSet,
-			validate: validateIPv6RouteWithTagSetAccept,
-			cleanup:  nil,
-		},
-		// 1.27-22
-		{
-			name:     "(1.27.22) redistribute-ipv6-route-policy-nexthop",
-			setup:    redistributeIPv6NullStaticRoute,
-			validate: validateRedistributeIPv6NullStaticRoute,
-			cleanup:  nil,
-		},
 	}
 )
 
@@ -614,7 +457,7 @@ func verifyTraffic(t *testing.T, ate *ondatra.ATEDevice, conf gosnappi.Config) {
 	}
 }
 
-func configureTableConnection(t *testing.T, dut *ondatra.DUTDevice, isV4, mPropagation bool, importPolicy string, defaulImport oc.E_RoutingPolicy_DefaultPolicyType) {
+func configureTableConnection(t *testing.T, dut *ondatra.DUTDevice, isV4, mPropagation bool, importPolicy string, defaultImport oc.E_RoutingPolicy_DefaultPolicyType) {
 	niPath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut))
 
 	dutOcRoot := &oc.Root{}
@@ -630,7 +473,7 @@ func configureTableConnection(t *testing.T, dut *ondatra.DUTDevice, isV4, mPropa
 		af,
 	)
 
-	tc.SetDefaultImportPolicy(defaulImport)
+	tc.SetDefaultImportPolicy(defaultImport)
 	if importPolicy != "" {
 		tc.SetImportPolicy([]string{importPolicy})
 	}
@@ -647,7 +490,10 @@ func redistributeStaticRouteNokia(t *testing.T, isV4 bool, mPropagation, policyR
 	}
 
 	apolicy := routingPolicy.GetOrCreatePolicyDefinition(redistributeStaticPolicy)
-	astmt, _ := apolicy.AppendNewStatement(policyStatement)
+	astmt, err := apolicy.AppendNewStatement(policyStatement)
+	if err != nil {
+		t.Fatalf("failed creating new policy statement, err: %s", err)
+	}
 	astmt.GetOrCreateConditions().SetInstallProtocolEq(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_STATIC)
 	astmt.GetOrCreateActions().PolicyResult = oc.RoutingPolicy_PolicyResultType_ACCEPT_ROUTE
 	if policyResultNext {
@@ -685,7 +531,7 @@ func configureStaticRedistributionPolicy(t *testing.T, dut *ondatra.DUTDevice, i
 	gnmi.Replace(t, dut, bgpPath.Config(), []string{redistributeStaticPolicy})
 }
 
-func redistributeIPv4Static(t *testing.T, dut *ondatra.DUTDevice, ate *ondatra.ATEDevice) {
+func redistributeIPv4Static(t *testing.T, dut *ondatra.DUTDevice) {
 	if dut.Vendor() != ondatra.NOKIA {
 		configureTableConnection(t, dut, isV4, !metricPropagate, "", oc.RoutingPolicy_DefaultPolicyType_ACCEPT_ROUTE)
 	} else {
@@ -693,13 +539,16 @@ func redistributeIPv4Static(t *testing.T, dut *ondatra.DUTDevice, ate *ondatra.A
 	}
 }
 
-func validateRedistributeStatic(t *testing.T, dut *ondatra.DUTDevice, ate *ondatra.ATEDevice, acceptRoute, isV4, mPropagation bool) {
+func validateRedistributeStatic(t *testing.T, dut *ondatra.DUTDevice, acceptRoute, isV4, mPropagation bool) {
 
 	redistributeStaticPolicy := redistributeStaticPolicyV4
+	policyStatement := "redistribute-static"
 	af := oc.Types_ADDRESS_FAMILY_IPV4
+	bgpPath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).Protocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP, "BGP").Bgp().Neighbor(atePort1.IPv4).AfiSafi(oc.BgpTypes_AFI_SAFI_TYPE_IPV4_UNICAST).ApplyPolicy().ExportPolicy().State()
 	if !isV4 {
 		redistributeStaticPolicy = redistributeStaticPolicyV6
 		af = oc.Types_ADDRESS_FAMILY_IPV6
+		bgpPath = gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).Protocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP, "BGP").Bgp().Neighbor(atePort1.IPv6).AfiSafi(oc.BgpTypes_AFI_SAFI_TYPE_IPV6_UNICAST).ApplyPolicy().ExportPolicy().State()
 	}
 
 	if dut.Vendor() != ondatra.NOKIA {
@@ -751,18 +600,46 @@ func validateRedistributeStatic(t *testing.T, dut *ondatra.DUTDevice, ate *ondat
 				t.Fatal("default import policy is not reject route but it should be")
 			}
 		}
-	}
+	} else {
+		var foundPDef oc.RoutingPolicy_PolicyDefinition
+		policyDef := gnmi.GetAll(t, dut, gnmi.OC().RoutingPolicy().PolicyDefinitionAny().State())
+		for _, pDef := range policyDef {
+			if pDef.GetName() == redistributeStaticPolicy {
+				t.Logf("Found policy: %v", pDef.GetName())
+				foundPDef = *pDef
+			}
+		}
 
-	// validateLearnedIPv4Prefix(t, ate, atePort1.Name+".BGP4.peer", "192.168.10.0", 0, true)
+		if foundPDef.GetName() != redistributeStaticPolicy {
+			t.Fatal("Expected import policy is not configured")
+		}
+
+		if foundPDef.GetStatement(policyStatement).GetOrCreateConditions().GetInstallProtocolEq() != oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_STATIC {
+			t.Fatal("Source protocol not static for redistribution policy.Expected static protocol")
+		}
+
+		if mPropagation {
+			if foundPDef.GetStatement(policyStatement).GetActions().GetBgpActions().GetSetMed() != oc.E_BgpActions_SetMed(oc.BgpActions_SetMed_IGP) {
+				t.Fatal("Expected metric propagation is not configured")
+			}
+		}
+
+		bgpPolicy := gnmi.Get(t, dut, bgpPath)
+		for _, exPol := range bgpPolicy {
+			if exPol == redistributeStaticPolicy {
+				t.Logf("Found policy: %v", exPol)
+			}
+		}
+	}
 }
 
 func validateRedistributeIPv4Static(t *testing.T, dut *ondatra.DUTDevice, ate *ondatra.ATEDevice) {
 
-	validateRedistributeStatic(t, dut, ate, acceptRoute, isV4, !metricPropagate)
+	validateRedistributeStatic(t, dut, acceptRoute, isV4, !metricPropagate)
 	validateLearnedIPv4Prefix(t, ate, atePort1.Name+".BGP4.peer", "192.168.10.0", 0, true)
 }
 
-func redistributeIPv4StaticWithMetricPropagation(t *testing.T, dut *ondatra.DUTDevice, ate *ondatra.ATEDevice) {
+func redistributeIPv4StaticWithMetricPropagation(t *testing.T, dut *ondatra.DUTDevice) {
 	if dut.Vendor() != ondatra.NOKIA {
 		configureTableConnection(t, dut, isV4, metricPropagate, "", oc.RoutingPolicy_DefaultPolicyType_ACCEPT_ROUTE)
 	} else {
@@ -771,11 +648,11 @@ func redistributeIPv4StaticWithMetricPropagation(t *testing.T, dut *ondatra.DUTD
 }
 
 func validateRedistributeIPv4StaticWithMetricPropagation(t *testing.T, dut *ondatra.DUTDevice, ate *ondatra.ATEDevice) {
-	validateRedistributeStatic(t, dut, ate, acceptRoute, isV4, metricPropagate)
+	validateRedistributeStatic(t, dut, acceptRoute, isV4, metricPropagate)
 	validateLearnedIPv4Prefix(t, ate, atePort1.Name+".BGP4.peer", "192.168.10.0", 104, true)
 }
 
-func redistributeIPv6Static(t *testing.T, dut *ondatra.DUTDevice, ate *ondatra.ATEDevice) {
+func redistributeIPv6Static(t *testing.T, dut *ondatra.DUTDevice) {
 	if dut.Vendor() != ondatra.NOKIA {
 		configureTableConnection(t, dut, !isV4, !metricPropagate, "", oc.RoutingPolicy_DefaultPolicyType_ACCEPT_ROUTE)
 	} else {
@@ -784,11 +661,11 @@ func redistributeIPv6Static(t *testing.T, dut *ondatra.DUTDevice, ate *ondatra.A
 }
 
 func validateRedistributeIPv6Static(t *testing.T, dut *ondatra.DUTDevice, ate *ondatra.ATEDevice) {
-	validateRedistributeStatic(t, dut, ate, acceptRoute, !isV4, !metricPropagate)
+	validateRedistributeStatic(t, dut, acceptRoute, !isV4, !metricPropagate)
 	validateLearnedIPv6Prefix(t, ate, atePort1.Name+".BGP6.peer", "2024:db8:128:128::", 0, true)
 }
 
-func redistributeIPv6StaticWithMetricPropagation(t *testing.T, dut *ondatra.DUTDevice, ate *ondatra.ATEDevice) {
+func redistributeIPv6StaticWithMetricPropagation(t *testing.T, dut *ondatra.DUTDevice) {
 	if dut.Vendor() != ondatra.NOKIA {
 		configureTableConnection(t, dut, !isV4, metricPropagate, "", oc.RoutingPolicy_DefaultPolicyType_ACCEPT_ROUTE)
 	} else {
@@ -797,11 +674,11 @@ func redistributeIPv6StaticWithMetricPropagation(t *testing.T, dut *ondatra.DUTD
 }
 
 func validateRedistributeIPv6StaticWithMetricPropagation(t *testing.T, dut *ondatra.DUTDevice, ate *ondatra.ATEDevice) {
-	validateRedistributeStatic(t, dut, ate, acceptRoute, !isV4, metricPropagate)
+	validateRedistributeStatic(t, dut, acceptRoute, !isV4, metricPropagate)
 	validateLearnedIPv6Prefix(t, ate, atePort1.Name+".BGP6.peer", "2024:db8:128:128::", 106, true)
 }
 
-func redistributeIPv4IPv6StaticDefaultRejectPolicy(t *testing.T, dut *ondatra.DUTDevice, ate *ondatra.ATEDevice) {
+func redistributeIPv4IPv6StaticDefaultRejectPolicy(t *testing.T, dut *ondatra.DUTDevice) {
 	if dut.Vendor() != ondatra.NOKIA {
 		configureTableConnection(t, dut, !isV4, metricPropagate, "", oc.RoutingPolicy_DefaultPolicyType_REJECT_ROUTE)
 	} else {
@@ -811,18 +688,18 @@ func redistributeIPv4IPv6StaticDefaultRejectPolicy(t *testing.T, dut *ondatra.DU
 }
 
 func validateRedistributeIPv4IPv6DefaultRejectPolicy(t *testing.T, dut *ondatra.DUTDevice, ate *ondatra.ATEDevice) {
-	validateRedistributeStatic(t, dut, ate, !acceptRoute, !isV4, metricPropagate)
+	validateRedistributeStatic(t, dut, !acceptRoute, !isV4, metricPropagate)
 	validateLearnedIPv4Prefix(t, ate, atePort1.Name+".BGP4.peer", "192.168.10.0", 0, false)
 	validateLearnedIPv6Prefix(t, ate, atePort1.Name+".BGP6.peer", "2024:db8:128:128::", 0, false)
 }
 
 func validateRedistributeIPv4Default(t *testing.T, dut *ondatra.DUTDevice, ate *ondatra.ATEDevice) {
-	validateRedistributeStatic(t, dut, ate, acceptRoute, isV4, metricPropagate)
+	validateRedistributeStatic(t, dut, acceptRoute, isV4, metricPropagate)
 	validateLearnedIPv4Prefix(t, ate, atePort1.Name+".BGP4.peer", "192.168.10.0", 104, true)
 }
 
 func validateRedistributeIPv6Default(t *testing.T, dut *ondatra.DUTDevice, ate *ondatra.ATEDevice) {
-	validateRedistributeStatic(t, dut, ate, acceptRoute, !isV4, metricPropagate)
+	validateRedistributeStatic(t, dut, acceptRoute, !isV4, metricPropagate)
 	validateLearnedIPv6Prefix(t, ate, atePort1.Name+".BGP6.peer", "2024:db8:128:128::", 106, true)
 }
 
@@ -938,7 +815,7 @@ func redistributeIPv6StaticRoutePolicy(t *testing.T, dut *ondatra.DUTDevice, ate
 	verifyTraffic(t, ate, otgConfig)
 }
 
-func redistributeIPv4StaticRoutePolicyWithASN(t *testing.T, dut *ondatra.DUTDevice, ate *ondatra.ATEDevice) {
+func redistributeIPv4StaticRoutePolicyWithASN(t *testing.T, dut *ondatra.DUTDevice) {
 	policyPath := gnmi.OC().RoutingPolicy().PolicyDefinition(redistributeStaticPolicyV4)
 
 	dutOcRoot := &oc.Root{}
@@ -969,7 +846,7 @@ func redistributeIPv4StaticRoutePolicyWithASN(t *testing.T, dut *ondatra.DUTDevi
 	}
 }
 
-func redistributeIPv6StaticRoutePolicyWithASN(t *testing.T, dut *ondatra.DUTDevice, ate *ondatra.ATEDevice) {
+func redistributeIPv6StaticRoutePolicyWithASN(t *testing.T, dut *ondatra.DUTDevice) {
 	policyPath := gnmi.OC().RoutingPolicy().PolicyDefinition(redistributeStaticPolicyV6)
 
 	dutOcRoot := &oc.Root{}
@@ -999,7 +876,7 @@ func redistributeIPv6StaticRoutePolicyWithASN(t *testing.T, dut *ondatra.DUTDevi
 	}
 }
 
-func redistributeIPv4StaticRoutePolicyWithMED(t *testing.T, dut *ondatra.DUTDevice, ate *ondatra.ATEDevice) {
+func redistributeIPv4StaticRoutePolicyWithMED(t *testing.T, dut *ondatra.DUTDevice) {
 	policyPath := gnmi.OC().RoutingPolicy().PolicyDefinition(redistributeStaticPolicyV4)
 
 	dutOcRoot := &oc.Root{}
@@ -1029,7 +906,7 @@ func redistributeIPv4StaticRoutePolicyWithMED(t *testing.T, dut *ondatra.DUTDevi
 	}
 }
 
-func redistributeIPv6StaticRoutePolicyWithMED(t *testing.T, dut *ondatra.DUTDevice, ate *ondatra.ATEDevice) {
+func redistributeIPv6StaticRoutePolicyWithMED(t *testing.T, dut *ondatra.DUTDevice) {
 	policyPath := gnmi.OC().RoutingPolicy().PolicyDefinition(redistributeStaticPolicyV6)
 
 	dutOcRoot := &oc.Root{}
@@ -1059,7 +936,7 @@ func redistributeIPv6StaticRoutePolicyWithMED(t *testing.T, dut *ondatra.DUTDevi
 	}
 }
 
-func redistributeIPv4StaticRoutePolicyWithLocalPreference(t *testing.T, dut *ondatra.DUTDevice, ate *ondatra.ATEDevice) {
+func redistributeIPv4StaticRoutePolicyWithLocalPreference(t *testing.T, dut *ondatra.DUTDevice) {
 	policyPath := gnmi.OC().RoutingPolicy().PolicyDefinition(redistributeStaticPolicyV4)
 
 	dutOcRoot := &oc.Root{}
@@ -1089,7 +966,7 @@ func redistributeIPv4StaticRoutePolicyWithLocalPreference(t *testing.T, dut *ond
 	}
 }
 
-func redistributeIPv6StaticRoutePolicyWithLocalPreference(t *testing.T, dut *ondatra.DUTDevice, ate *ondatra.ATEDevice) {
+func redistributeIPv6StaticRoutePolicyWithLocalPreference(t *testing.T, dut *ondatra.DUTDevice) {
 	policyPath := gnmi.OC().RoutingPolicy().PolicyDefinition(redistributeStaticPolicyV6)
 
 	dutOcRoot := &oc.Root{}
@@ -1119,7 +996,7 @@ func redistributeIPv6StaticRoutePolicyWithLocalPreference(t *testing.T, dut *ond
 	}
 }
 
-func redistributeIPv4StaticRoutePolicyWithCommunitySet(t *testing.T, dut *ondatra.DUTDevice, ate *ondatra.ATEDevice) {
+func redistributeIPv4StaticRoutePolicyWithCommunitySet(t *testing.T, dut *ondatra.DUTDevice) {
 	policyPath := gnmi.OC().RoutingPolicy().PolicyDefinition(redistributeStaticPolicyV4)
 	communityPath := gnmi.OC().RoutingPolicy().DefinedSets().BgpDefinedSets().CommunitySet("community-set-v4")
 
@@ -1158,7 +1035,7 @@ func redistributeIPv4StaticRoutePolicyWithCommunitySet(t *testing.T, dut *ondatr
 	}
 }
 
-func redistributeIPv6StaticRoutePolicyWithCommunitySet(t *testing.T, dut *ondatra.DUTDevice, ate *ondatra.ATEDevice) {
+func redistributeIPv6StaticRoutePolicyWithCommunitySet(t *testing.T, dut *ondatra.DUTDevice) {
 	policyPath := gnmi.OC().RoutingPolicy().PolicyDefinition(redistributeStaticPolicyV6)
 	communityPath := gnmi.OC().RoutingPolicy().DefinedSets().BgpDefinedSets().CommunitySet("community-set-v6")
 
@@ -1197,19 +1074,19 @@ func redistributeIPv6StaticRoutePolicyWithCommunitySet(t *testing.T, dut *ondatr
 	}
 }
 
-func redistributeIPv4StaticRoutePolicyWithUnmatchedTagSet(t *testing.T, dut *ondatra.DUTDevice, ate *ondatra.ATEDevice) {
+func redistributeIPv4StaticRoutePolicyWithUnmatchedTagSet(t *testing.T, dut *ondatra.DUTDevice) {
 	redistributeStaticRoutePolicyWithTagSet(t, dut, isV4, 100)
 }
 
-func redistributeIPv4StaticRoutePolicyWithMatchedTagSet(t *testing.T, dut *ondatra.DUTDevice, ate *ondatra.ATEDevice) {
+func redistributeIPv4StaticRoutePolicyWithMatchedTagSet(t *testing.T, dut *ondatra.DUTDevice) {
 	redistributeStaticRoutePolicyWithTagSet(t, dut, isV4, 40)
 }
 
-func redistributeIPv6StaticRoutePolicyWithUnmatchedTagSet(t *testing.T, dut *ondatra.DUTDevice, ate *ondatra.ATEDevice) {
+func redistributeIPv6StaticRoutePolicyWithUnmatchedTagSet(t *testing.T, dut *ondatra.DUTDevice) {
 	redistributeStaticRoutePolicyWithTagSet(t, dut, !isV4, 100)
 }
 
-func redistributeIPv6StaticRoutePolicyWithMatchedTagSet(t *testing.T, dut *ondatra.DUTDevice, ate *ondatra.ATEDevice) {
+func redistributeIPv6StaticRoutePolicyWithMatchedTagSet(t *testing.T, dut *ondatra.DUTDevice) {
 	redistributeStaticRoutePolicyWithTagSet(t, dut, !isV4, 60)
 }
 
@@ -1405,31 +1282,31 @@ func validateIPv6RouteWithTagSetAccept(t *testing.T, dut *ondatra.DUTDevice, ate
 	validateRedistributeRouteWithTagSet(t, dut, ate, !isV4, shouldBePresent)
 }
 
-func validateIPv4RouteWithMED(t *testing.T, dut *ondatra.DUTDevice, ate *ondatra.ATEDevice) {
+func validateIPv4RouteWithMED(t *testing.T, ate *ondatra.ATEDevice) {
 	validateLearnedIPv4Prefix(t, ate, atePort1.Name+".BGP4.peer", "192.168.10.0", 1000, true)
 }
-func validateIPv6RouteWithMED(t *testing.T, dut *ondatra.DUTDevice, ate *ondatra.ATEDevice) {
+func validateIPv6RouteWithMED(t *testing.T, ate *ondatra.ATEDevice) {
 	validateLearnedIPv6Prefix(t, ate, atePort1.Name+".BGP6.peer", "2024:db8:128:128::", 1000, true)
 }
 
-func validateIPv4RouteWithASN(t *testing.T, dut *ondatra.DUTDevice, ate *ondatra.ATEDevice) {
+func validateIPv4RouteWithASN(t *testing.T, ate *ondatra.ATEDevice) {
 	validateIPv4PrefixASN(t, ate, atePort1.Name+".BGP4.peer", "192.168.10.0", []uint32{64512, 65499, 65499, 65499})
 }
-func validateIPv6RouteWithASN(t *testing.T, dut *ondatra.DUTDevice, ate *ondatra.ATEDevice) {
+func validateIPv6RouteWithASN(t *testing.T, ate *ondatra.ATEDevice) {
 	validateIPv6PrefixASN(t, ate, atePort1.Name+".BGP6.peer", "2024:db8:128:128::", []uint32{64512, 64512})
 }
 
-func validateIPv4RouteWithLocalPreference(t *testing.T, dut *ondatra.DUTDevice, ate *ondatra.ATEDevice) {
+func validateIPv4RouteWithLocalPreference(t *testing.T, ate *ondatra.ATEDevice) {
 	validateIPv4PrefixLocalPreference(t, ate, atePort3.Name+".BGP4.peer", "192.168.10.0", 100)
 }
-func validateIPv6RouteWithLocalPreference(t *testing.T, dut *ondatra.DUTDevice, ate *ondatra.ATEDevice) {
+func validateIPv6RouteWithLocalPreference(t *testing.T, ate *ondatra.ATEDevice) {
 	validateIPv6PrefixLocalPreference(t, ate, atePort3.Name+".BGP6.peer", "2024:db8:128:128::", 100)
 }
 
-func validateIPv4RouteWithCommunitySet(t *testing.T, dut *ondatra.DUTDevice, ate *ondatra.ATEDevice) {
+func validateIPv4RouteWithCommunitySet(t *testing.T, ate *ondatra.ATEDevice) {
 	validateIPv4PrefixCommunitySet(t, ate, atePort3.Name+".BGP4.peer", "192.168.10.0", "64512:100")
 }
-func validateIPv6RouteWithCommunitySet(t *testing.T, dut *ondatra.DUTDevice, ate *ondatra.ATEDevice) {
+func validateIPv6RouteWithCommunitySet(t *testing.T, ate *ondatra.ATEDevice) {
 	validateIPv6PrefixCommunitySet(t, ate, atePort3.Name+".BGP6.peer", "2024:db8:128:128::", "64512:100")
 }
 
@@ -1584,34 +1461,6 @@ func validateRedistributeIPv6NullStaticRoute(t *testing.T, dut *ondatra.DUTDevic
 	}
 }
 
-func validateRedistributeIPv4RoutePolicy(t *testing.T, dut *ondatra.DUTDevice, ate *ondatra.ATEDevice) {
-	if dut.Vendor() != ondatra.NOKIA {
-		tcState := gnmi.Get(t, dut, gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).TableConnection(
-			oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_STATIC,
-			oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP,
-			oc.Types_ADDRESS_FAMILY_IPV6).State())
-
-		// just checking that metric propagation got enabled since the first test case already covers
-		// the rest of the settings we care about, which in this case is the updated policy
-		if tcState.GetDefaultImportPolicy() != oc.RoutingPolicy_DefaultPolicyType_REJECT_ROUTE {
-			t.Fatal("default import policy is not reject route but it should be")
-		}
-
-		importPolicies := tcState.GetImportPolicy()
-		if len(importPolicies) == 0 || len(importPolicies) > 1 {
-			t.Fatal("import policies len is not one, but it should be")
-		}
-
-		// we replaced this container so there should only be our import policy anyway
-		if importPolicies[0] != redistributeStaticPolicyV4 {
-			t.Fatal("expected import policy is not configured")
-		}
-	}
-
-	// we should no longer see these prefixes on either peering session
-	validateLearnedIPv4Prefix(t, ate, atePort1.Name+".BGP4.peer", "192.168.10.0", 0, true)
-}
-
 func validateIPv4PrefixASN(t *testing.T, ate *ondatra.ATEDevice, bgpPeerName, subnet string, wantASPath []uint32) {
 
 	time.Sleep(5 * time.Second)
@@ -1630,7 +1479,6 @@ func validateIPv4PrefixASN(t *testing.T, ate *ondatra.ATEDevice, bgpPeerName, su
 	if !foundPrefix {
 		t.Fatalf("Prefix %v not present in OTG", subnet)
 	}
-
 }
 
 func validateIPv6PrefixASN(t *testing.T, ate *ondatra.ATEDevice, bgpPeerName, subnet string, wantASPath []uint32) {
@@ -1655,7 +1503,6 @@ func validateIPv6PrefixASN(t *testing.T, ate *ondatra.ATEDevice, bgpPeerName, su
 }
 
 func validateIPv4PrefixLocalPreference(t *testing.T, ate *ondatra.ATEDevice, bgpPeerName, subnet string, wantLocalPreference uint32) {
-
 	time.Sleep(5 * time.Second)
 	foundPrefix := false
 	prefixes := gnmi.GetAll(t, ate.OTG(), gnmi.OTG().BgpPeer(bgpPeerName).UnicastIpv4PrefixAny().State())
@@ -1672,11 +1519,9 @@ func validateIPv4PrefixLocalPreference(t *testing.T, ate *ondatra.ATEDevice, bgp
 	if !foundPrefix {
 		t.Fatalf("Prefix %v not present in OTG", subnet)
 	}
-
 }
 
 func validateIPv6PrefixLocalPreference(t *testing.T, ate *ondatra.ATEDevice, bgpPeerName, subnet string, wantLocalPreference uint32) {
-
 	time.Sleep(5 * time.Second)
 	foundPrefix := false
 	prefixes := gnmi.GetAll(t, ate.OTG(), gnmi.OTG().BgpPeer(bgpPeerName).UnicastIpv6PrefixAny().State())
@@ -1693,11 +1538,9 @@ func validateIPv6PrefixLocalPreference(t *testing.T, ate *ondatra.ATEDevice, bgp
 	if !foundPrefix {
 		t.Fatalf("Prefix %v not present in OTG", subnet)
 	}
-
 }
 
 func validateIPv4PrefixCommunitySet(t *testing.T, ate *ondatra.ATEDevice, bgpPeerName, subnet, wantCommunitySet string) {
-
 	time.Sleep(5 * time.Second)
 	foundPrefix := false
 	prefixes := gnmi.GetAll(t, ate.OTG(), gnmi.OTG().BgpPeer(bgpPeerName).UnicastIpv4PrefixAny().State())
@@ -1719,11 +1562,9 @@ func validateIPv4PrefixCommunitySet(t *testing.T, ate *ondatra.ATEDevice, bgpPee
 	if !foundPrefix {
 		t.Fatalf("Prefix %v not present in OTG", subnet)
 	}
-
 }
 
 func validateIPv6PrefixCommunitySet(t *testing.T, ate *ondatra.ATEDevice, bgpPeerName, subnet, wantCommunitySet string) {
-
 	time.Sleep(5 * time.Second)
 	foundPrefix := false
 	prefixes := gnmi.GetAll(t, ate.OTG(), gnmi.OTG().BgpPeer(bgpPeerName).UnicastIpv6PrefixAny().State())
@@ -1745,7 +1586,6 @@ func validateIPv6PrefixCommunitySet(t *testing.T, ate *ondatra.ATEDevice, bgpPee
 	if !foundPrefix {
 		t.Fatalf("Prefix %v not present in OTG", subnet)
 	}
-
 }
 
 func validateLearnedIPv4Prefix(t *testing.T, ate *ondatra.ATEDevice, bgpPeerName, subnet string, expectedMED uint32, shouldBePresent bool) {
@@ -1841,14 +1681,145 @@ func TestBGPStaticRouteRedistribution(t *testing.T) {
 
 	awaitBGPEstablished(t, dut, []string{atePort1.IPv4, atePort3.IPv4})
 
+	type testCase struct {
+		name     string
+		setup    func()
+		validate func()
+	}
+
+	testCases := []testCase{
+		// 1.27-1
+		{
+			name:     "1.27.1 redistribute-ipv4-static-routes-with-metric-propagation-disabled",
+			setup:    func() { redistributeIPv4Static(t, dut) },
+			validate: func() { validateRedistributeIPv4Static(t, dut, ate) },
+		},
+		// 1.27-2
+		{
+			name:     "1.27.2 redistribute-ipv4-static-routes-with-metric-propagation-enabled",
+			setup:    func() { redistributeIPv4StaticWithMetricPropagation(t, dut) },
+			validate: func() { validateRedistributeIPv4StaticWithMetricPropagation(t, dut, ate) },
+		},
+		// 1.27-3
+		{
+			name:     "1.27.3 redistribute-ipv6-static-routes-with-metric-propagation-disabled",
+			setup:    func() { redistributeIPv6Static(t, dut) },
+			validate: func() { validateRedistributeIPv6Static(t, dut, ate) },
+		},
+		// 1.27-4
+		{
+			name:     "1.27.4 redistribute-ipv6-static-routes-with-metric-propagation-enabled",
+			setup:    func() { redistributeIPv6StaticWithMetricPropagation(t, dut) },
+			validate: func() { validateRedistributeIPv6StaticWithMetricPropagation(t, dut, ate) },
+		},
+		// 1.27-5
+		{
+			name:     "1.27.5 redistribute-ipv4-ipv6-default-reject-policy",
+			setup:    func() { redistributeIPv4IPv6StaticDefaultRejectPolicy(t, dut) },
+			validate: func() { validateRedistributeIPv4IPv6DefaultRejectPolicy(t, dut, ate) },
+		},
+		// 1.27-6
+		{
+			name:     "1.27.6 redistribute-ipv4-route-policy",
+			setup:    func() { redistributeIPv4StaticRoutePolicy(t, dut, ate) },
+			validate: func() { validateRedistributeIPv4Default(t, dut, ate) },
+		},
+		// 1.27-7
+		{
+			name:     "1.27.7 redistribute-ipv4-route-policy-as-prepend",
+			setup:    func() { redistributeIPv4StaticRoutePolicyWithASN(t, dut) },
+			validate: func() { validateIPv4RouteWithASN(t, ate) },
+		},
+		// 1.27-8
+		{
+			name:     "1.27.8 redistribute-ipv4-route-policy-med",
+			setup:    func() { redistributeIPv4StaticRoutePolicyWithMED(t, dut) },
+			validate: func() { validateIPv4RouteWithMED(t, ate) },
+		},
+		// 1.27-9
+		{
+			name:     "1.27.9 redistribute-ipv4-route-policy-local-preference",
+			setup:    func() { redistributeIPv4StaticRoutePolicyWithLocalPreference(t, dut) },
+			validate: func() { validateIPv4RouteWithLocalPreference(t, ate) },
+		},
+		// 1.27-10
+		{
+			name:     "1.27.10 redistribute-ipv4-route-policy-community-set",
+			setup:    func() { redistributeIPv4StaticRoutePolicyWithCommunitySet(t, dut) },
+			validate: func() { validateIPv4RouteWithCommunitySet(t, ate) },
+		},
+		// 1.27-12
+		{
+			name:     "1.27.12 redistribute-ipv4-route-policy-unmatched-tag",
+			setup:    func() { redistributeIPv4StaticRoutePolicyWithUnmatchedTagSet(t, dut) },
+			validate: func() { validateIPv4RouteWithTagSetReject(t, dut, ate) },
+		},
+		// 1.27-13
+		{
+			name:     "1.27.13 redistribute-ipv4-route-policy-matched-set",
+			setup:    func() { redistributeIPv4StaticRoutePolicyWithMatchedTagSet(t, dut) },
+			validate: func() { validateIPv4RouteWithTagSetAccept(t, dut, ate) },
+		},
+		// 1.27-14
+		{
+			name:     "1.27.14 redistribute-ipv4-route-policy-nexthop",
+			setup:    func() { redistributeIPv4NullStaticRoute(t, dut, ate) },
+			validate: func() { validateRedistributeIPv4NullStaticRoute(t, dut, ate) },
+		},
+		// 1.27-15
+		{
+			name:     "1.27.15 redistribute-ipv6-route-policy",
+			setup:    func() { redistributeIPv6StaticRoutePolicy(t, dut, ate) },
+			validate: func() { validateRedistributeIPv6Default(t, dut, ate) },
+		},
+		// 1.27-16
+		{
+			name:     "1.27.16 redistribute-ipv6-route-policy-as-prepend",
+			setup:    func() { redistributeIPv6StaticRoutePolicyWithASN(t, dut) },
+			validate: func() { validateIPv6RouteWithASN(t, ate) },
+		},
+		// 1.27-17
+		{
+			name:     "1.27.17 redistribute-ipv6-route-policy-med",
+			setup:    func() { redistributeIPv6StaticRoutePolicyWithMED(t, dut) },
+			validate: func() { validateIPv6RouteWithMED(t, ate) },
+		},
+		// 1.27-18
+		{
+			name:     "1.27.18 redistribute-ipv6-route-policy-local-preference",
+			setup:    func() { redistributeIPv6StaticRoutePolicyWithLocalPreference(t, dut) },
+			validate: func() { validateIPv6RouteWithLocalPreference(t, ate) },
+		},
+		// 1.27-19
+		{
+			name:     "1.27.19 redistribute-ipv6-route-policy-community-set",
+			setup:    func() { redistributeIPv6StaticRoutePolicyWithCommunitySet(t, dut) },
+			validate: func() { validateIPv6RouteWithCommunitySet(t, ate) },
+		},
+		// 1.27-20
+		{
+			name:     "1.27.20 redistribute-ipv6-route-policy-unmatched-tag",
+			setup:    func() { redistributeIPv6StaticRoutePolicyWithUnmatchedTagSet(t, dut) },
+			validate: func() { validateIPv6RouteWithTagSetReject(t, dut, ate) },
+		},
+		// 1.27-21
+		{
+			name:     "1.27.21 redistribute-ipv6-route-policy-matched-set",
+			setup:    func() { redistributeIPv6StaticRoutePolicyWithMatchedTagSet(t, dut) },
+			validate: func() { validateIPv6RouteWithTagSetAccept(t, dut, ate) },
+		},
+		// 1.27-22
+		{
+			name:     "1.27.22 redistribute-ipv6-route-policy-nexthop",
+			setup:    func() { redistributeIPv6NullStaticRoute(t, dut, ate) },
+			validate: func() { validateRedistributeIPv6NullStaticRoute(t, dut, ate) },
+		},
+	}
+
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			tc.setup(t, dut, ate)
-			tc.validate(t, dut, ate)
-
-			if tc.cleanup != nil {
-				tc.cleanup(t, dut)
-			}
+			tc.setup()
+			tc.validate()
 		})
 	}
 }
