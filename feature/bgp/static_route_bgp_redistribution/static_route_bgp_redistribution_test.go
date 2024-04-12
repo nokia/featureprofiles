@@ -161,7 +161,7 @@ func configureDUTStatic(
 
 	ipv4StaticRoute := networkInstanceProtocolStatic.GetOrCreateStatic("192.168.10.0/24")
 	// TODO - we dont support, guessing table connection related?
-	if dut.Vendor() != ondatra.NOKIA {
+	if !deviations.UseVendorNativeTagSetConfig(dut) {
 		ipv4StaticRoute.SetSetTag(oc.UnionString("40"))
 	} else {
 		configureStaticRouteTagSet(t, dut)
@@ -173,7 +173,7 @@ func configureDUTStatic(
 	ipv4StaticRouteNextHop.SetNextHop(oc.UnionString("192.168.1.6"))
 
 	ipv6StaticRoute := networkInstanceProtocolStatic.GetOrCreateStatic("2024:db8:128:128::/64")
-	if dut.Vendor() != ondatra.NOKIA {
+	if !deviations.UseVendorNativeTagSetConfig(dut) {
 		ipv6StaticRoute.SetSetTag(oc.UnionString("60"))
 	} else {
 		attachTagSetToStaticRoute(t, dut, "2024:db8:128:128::/64", "tag-static-v6")
@@ -256,7 +256,7 @@ func configureDUTBGP(
 	bgpGlobalIPv6AF := bgpGlobal.GetOrCreateAfiSafi(oc.BgpTypes_AFI_SAFI_TYPE_IPV6_UNICAST)
 	bgpGlobalIPv6AF.SetEnabled(true)
 
-	if dut.Vendor() != ondatra.NOKIA {
+	if !deviations.SkipBgpSendCommunityType(dut) {
 		bgpGlobalIPv6AF.SetSendCommunityType([]oc.E_Bgp_CommunityType{oc.Bgp_CommunityType_STANDARD})
 		bgpGlobalIPv4AF.SetSendCommunityType([]oc.E_Bgp_CommunityType{oc.Bgp_CommunityType_STANDARD})
 	}
@@ -556,7 +556,7 @@ func validateRedistributeStatic(t *testing.T, dut *ondatra.DUTDevice, acceptRout
 		bgpPath = gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).Protocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP, "BGP").Bgp().Neighbor(atePort1.IPv6).AfiSafi(oc.BgpTypes_AFI_SAFI_TYPE_IPV6_UNICAST).ApplyPolicy().ExportPolicy().State()
 	}
 
-	if dut.Vendor() != ondatra.NOKIA {
+	if !deviations.UnsupportedTableConnectionRedistribution(dut) {
 		tcState := gnmi.Get(t, dut, gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).TableConnection(
 			oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_STATIC,
 			oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP,
@@ -710,7 +710,7 @@ func validatePrefixSetRoutingPolicy(t *testing.T, dut *ondatra.DUTDevice, isV4 b
 
 // 1.27.1 setup function
 func redistributeIPv4Static(t *testing.T, dut *ondatra.DUTDevice) {
-	if dut.Vendor() != ondatra.NOKIA {
+	if !deviations.UnsupportedTableConnectionRedistribution(dut) {
 		configureTableConnection(t, dut, isV4, !metricPropagate, "", oc.RoutingPolicy_DefaultPolicyType_ACCEPT_ROUTE)
 	} else {
 		configureStaticRedistributionPolicy(t, dut, isV4, acceptRoute, !metricPropagate)
@@ -725,7 +725,7 @@ func validateRedistributeIPv4Static(t *testing.T, dut *ondatra.DUTDevice, ate *o
 
 // 1.27.2 setup function
 func redistributeIPv4StaticWithMetricPropagation(t *testing.T, dut *ondatra.DUTDevice) {
-	if dut.Vendor() != ondatra.NOKIA {
+	if !deviations.UnsupportedTableConnectionRedistribution(dut) {
 		configureTableConnection(t, dut, isV4, metricPropagate, "", oc.RoutingPolicy_DefaultPolicyType_ACCEPT_ROUTE)
 	} else {
 		configureStaticRedistributionPolicy(t, dut, isV4, acceptRoute, metricPropagate)
@@ -740,7 +740,7 @@ func validateRedistributeIPv4StaticWithMetricPropagation(t *testing.T, dut *onda
 
 // 1.27.3 setup function
 func redistributeIPv6Static(t *testing.T, dut *ondatra.DUTDevice) {
-	if dut.Vendor() != ondatra.NOKIA {
+	if !deviations.UnsupportedTableConnectionRedistribution(dut) {
 		configureTableConnection(t, dut, !isV4, !metricPropagate, "", oc.RoutingPolicy_DefaultPolicyType_ACCEPT_ROUTE)
 	} else {
 		configureStaticRedistributionPolicy(t, dut, !isV4, acceptRoute, !metricPropagate)
@@ -755,7 +755,7 @@ func validateRedistributeIPv6Static(t *testing.T, dut *ondatra.DUTDevice, ate *o
 
 // 1.27.4 setup function
 func redistributeIPv6StaticWithMetricPropagation(t *testing.T, dut *ondatra.DUTDevice) {
-	if dut.Vendor() != ondatra.NOKIA {
+	if !deviations.UnsupportedTableConnectionRedistribution(dut) {
 		configureTableConnection(t, dut, !isV4, metricPropagate, "", oc.RoutingPolicy_DefaultPolicyType_ACCEPT_ROUTE)
 	} else {
 		configureStaticRedistributionPolicy(t, dut, !isV4, acceptRoute, metricPropagate)
@@ -770,7 +770,7 @@ func validateRedistributeIPv6StaticWithMetricPropagation(t *testing.T, dut *onda
 
 // 1.27.5 setup function
 func redistributeIPv4IPv6StaticDefaultRejectPolicy(t *testing.T, dut *ondatra.DUTDevice) {
-	if dut.Vendor() != ondatra.NOKIA {
+	if !deviations.UnsupportedTableConnectionRedistribution(dut) {
 		configureTableConnection(t, dut, isV4, !metricPropagate, "", oc.RoutingPolicy_DefaultPolicyType_REJECT_ROUTE)
 		configureTableConnection(t, dut, !isV4, !metricPropagate, "", oc.RoutingPolicy_DefaultPolicyType_REJECT_ROUTE)
 	} else {
@@ -813,7 +813,7 @@ func redistributeIPv4PrefixRoutePolicy(t *testing.T, dut *ondatra.DUTDevice, ate
 
 	gnmi.Replace(t, dut, gnmi.OC().RoutingPolicy().DefinedSets().PrefixSet("prefix-set-v4").Config(), v4PrefixSet)
 
-	if dut.Vendor() == ondatra.NOKIA {
+	if !deviations.UnsupportedTableConnectionRedistribution(dut) {
 		redistributePolicy = redistributeStaticRoute(t, isV4, metricPropagate, policyResultNext, redistributePolicy)
 	}
 
@@ -833,7 +833,7 @@ func redistributeIPv4PrefixRoutePolicy(t *testing.T, dut *ondatra.DUTDevice, ate
 
 	gnmi.Replace(t, dut, policyPath.Config(), redistributePolicyDefinition)
 
-	if dut.Vendor() != ondatra.NOKIA {
+	if !deviations.UnsupportedTableConnectionRedistribution(dut) {
 		configureTableConnection(t, dut, isV4, metricPropagate, redistributeStaticPolicyV4, oc.RoutingPolicy_DefaultPolicyType_ACCEPT_ROUTE)
 	} else {
 		bgpPath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).Protocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP, "BGP").Bgp().Neighbor(atePort1.IPv4).AfiSafi(oc.BgpTypes_AFI_SAFI_TYPE_IPV4_UNICAST).ApplyPolicy().ExportPolicy()
@@ -869,7 +869,7 @@ func redistributeStaticRoutePolicyWithASN(t *testing.T, dut *ondatra.DUTDevice, 
 	dutOcRoot := &oc.Root{}
 	redistributePolicy := dutOcRoot.GetOrCreateRoutingPolicy()
 
-	if dut.Vendor() == ondatra.NOKIA {
+	if !deviations.UnsupportedTableConnectionRedistribution(dut) {
 		redistributePolicy = redistributeStaticRoute(t, isV4, metricPropagate, policyResultNext, redistributePolicy)
 	}
 
@@ -889,7 +889,7 @@ func redistributeStaticRoutePolicyWithASN(t *testing.T, dut *ondatra.DUTDevice, 
 
 	gnmi.Replace(t, dut, policyPath.Config(), redistributePolicyDefinition)
 
-	if dut.Vendor() != ondatra.NOKIA {
+	if !deviations.UnsupportedTableConnectionRedistribution(dut) {
 		configureTableConnection(t, dut, isV4, metricPropagate, redistributeStaticPolicy, oc.RoutingPolicy_DefaultPolicyType_ACCEPT_ROUTE)
 	} else {
 		gnmi.Replace(t, dut, bgpPath.Config(), []string{redistributeStaticPolicy})
@@ -914,7 +914,7 @@ func redistributeStaticRoutePolicyWithMED(t *testing.T, dut *ondatra.DUTDevice, 
 	redistributePolicy := dutOcRoot.GetOrCreateRoutingPolicy()
 	redistributePolicyDefinition := redistributePolicy.GetOrCreatePolicyDefinition(redistributeStaticPolicy)
 
-	if dut.Vendor() == ondatra.NOKIA {
+	if !deviations.UnsupportedTableConnectionRedistribution(dut) {
 		redistributePolicy = redistributeStaticRoute(t, isV4, metricPropagate, policyResultNext, redistributePolicy)
 	}
 
@@ -929,7 +929,7 @@ func redistributeStaticRoutePolicyWithMED(t *testing.T, dut *ondatra.DUTDevice, 
 
 	gnmi.Replace(t, dut, policyPath.Config(), redistributePolicyDefinition)
 
-	if dut.Vendor() != ondatra.NOKIA {
+	if !deviations.UnsupportedTableConnectionRedistribution(dut) {
 		configureTableConnection(t, dut, isV4, metricPropagate, redistributeStaticPolicy, oc.RoutingPolicy_DefaultPolicyType_ACCEPT_ROUTE)
 	} else {
 		gnmi.Replace(t, dut, bgpPath.Config(), []string{redistributeStaticPolicy})
@@ -955,7 +955,7 @@ func redistributeStaticRoutePolicyWithLocalPreference(t *testing.T, dut *ondatra
 	redistributePolicy := dutOcRoot.GetOrCreateRoutingPolicy()
 	redistributePolicyDefinition := redistributePolicy.GetOrCreatePolicyDefinition(redistributeStaticPolicy)
 
-	if dut.Vendor() == ondatra.NOKIA {
+	if !deviations.UnsupportedTableConnectionRedistribution(dut) {
 		redistributePolicy = redistributeStaticRoute(t, isV4, metricPropagate, policyResultNext, redistributePolicy)
 	}
 
@@ -970,7 +970,7 @@ func redistributeStaticRoutePolicyWithLocalPreference(t *testing.T, dut *ondatra
 
 	gnmi.Replace(t, dut, policyPath.Config(), redistributePolicyDefinition)
 
-	if dut.Vendor() != ondatra.NOKIA {
+	if !deviations.UnsupportedTableConnectionRedistribution(dut) {
 		configureTableConnection(t, dut, isV4, metricPropagate, redistributeStaticPolicy, oc.RoutingPolicy_DefaultPolicyType_ACCEPT_ROUTE)
 	} else {
 		gnmi.Replace(t, dut, bgpPath.Config(), []string{redistributeStaticPolicy})
@@ -1006,7 +1006,7 @@ func redistributeStaticRoutePolicyWithCommunitySet(t *testing.T, dut *ondatra.DU
 	gnmi.Replace(t, dut, policyPath.Config(), redistributePolicyDefinition)
 	gnmi.Replace(t, dut, communityPath.Config(), communitySetPolicyDefinition)
 
-	if dut.Vendor() == ondatra.NOKIA {
+	if !deviations.UnsupportedTableConnectionRedistribution(dut) {
 		redistributePolicy = redistributeStaticRoute(t, isV4, metricPropagate, policyResultNext, redistributePolicy)
 	}
 
@@ -1022,7 +1022,7 @@ func redistributeStaticRoutePolicyWithCommunitySet(t *testing.T, dut *ondatra.DU
 
 	gnmi.Replace(t, dut, policyPath.Config(), redistributePolicyDefinition)
 
-	if dut.Vendor() != ondatra.NOKIA {
+	if !deviations.UnsupportedTableConnectionRedistribution(dut) {
 		configureTableConnection(t, dut, isV4, metricPropagate, redistributeStaticPolicy, oc.RoutingPolicy_DefaultPolicyType_ACCEPT_ROUTE)
 	} else {
 		gnmi.Replace(t, dut, bgpPath.Config(), []string{redistributeStaticPolicy})
@@ -1050,7 +1050,7 @@ func redistributeStaticRoutePolicyWithTagSet(t *testing.T, dut *ondatra.DUTDevic
 	redistributePolicy := dutOcRoot.GetOrCreateRoutingPolicy()
 	redistributePolicyDefinition := redistributePolicy.GetOrCreatePolicyDefinition(redistributeStaticPolicy)
 
-	if dut.Vendor() == ondatra.NOKIA {
+	if !deviations.UnsupportedTableConnectionRedistribution(dut) {
 		redistributePolicy = redistributeStaticRoute(t, isV4, !metricPropagate, policyResultNext, redistributePolicy)
 		gnmi.Replace(t, dut, policyPath.Config(), redistributePolicyDefinition)
 		configureRoutingPolicyTagSet(t, dut, isV4, tagSetValue)
@@ -1095,7 +1095,7 @@ func redistributeIPv4NullStaticRoute(t *testing.T, dut *ondatra.DUTDevice, ate *
 	networkInstanceProtocolStatic := networkInstance.GetOrCreateProtocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_STATIC, "static")
 	networkInstanceProtocolStatic.SetEnabled(true)
 	ipv4StaticRoute := networkInstanceProtocolStatic.GetOrCreateStatic("192.168.20.0/24")
-	if dut.Vendor() != ondatra.NOKIA {
+	if !deviations.UseVendorNativeTagSetConfig(dut) {
 		ipv4StaticRoute.SetSetTag(oc.UnionString("40"))
 	} else {
 		configureStaticRouteTagSet(t, dut)
@@ -1108,7 +1108,7 @@ func redistributeIPv4NullStaticRoute(t *testing.T, dut *ondatra.DUTDevice, ate *
 	redistributePolicy := dutOcRoot.GetOrCreateRoutingPolicy()
 	redistributePolicyDefinition := redistributePolicy.GetOrCreatePolicyDefinition(redistributeStaticPolicyV4)
 
-	if dut.Vendor() == ondatra.NOKIA {
+	if !deviations.UnsupportedTableConnectionRedistribution(dut) {
 		redistributePolicy = redistributeStaticRoute(t, isV4, !metricPropagate, policyResultNext, redistributePolicy)
 
 		statementV4, err := redistributePolicyDefinition.AppendNewStatement(policyStatementV4)
@@ -1162,7 +1162,7 @@ func redistributeIPv6NullStaticRoute(t *testing.T, dut *ondatra.DUTDevice, ate *
 	networkInstanceProtocolStatic := networkInstance.GetOrCreateProtocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_STATIC, "static")
 	networkInstanceProtocolStatic.SetEnabled(true)
 	ipv6StaticRoute := networkInstanceProtocolStatic.GetOrCreateStatic("2024:db8:64:64::/64")
-	if dut.Vendor() != ondatra.NOKIA {
+	if !deviations.UseVendorNativeACLConfig(dut) {
 		ipv6StaticRoute.SetSetTag(oc.UnionString("60"))
 	} else {
 		configureStaticRouteTagSet(t, dut)
@@ -1175,7 +1175,7 @@ func redistributeIPv6NullStaticRoute(t *testing.T, dut *ondatra.DUTDevice, ate *
 	redistributePolicy := dutOcRoot.GetOrCreateRoutingPolicy()
 	redistributePolicyDefinition := redistributePolicy.GetOrCreatePolicyDefinition(redistributeStaticPolicyV6)
 
-	if dut.Vendor() == ondatra.NOKIA {
+	if !deviations.UnsupportedTableConnectionRedistribution(dut) {
 		redistributePolicy = redistributeStaticRoute(t, !isV4, !metricPropagate, policyResultNext, redistributePolicy)
 
 		statementV6, err := redistributePolicyDefinition.AppendNewStatement(policyStatementV6)
@@ -1238,7 +1238,7 @@ func redistributeIPv6StaticRoutePolicy(t *testing.T, dut *ondatra.DUTDevice, ate
 
 	gnmi.Replace(t, dut, gnmi.OC().RoutingPolicy().DefinedSets().PrefixSet("prefix-set-v6").Config(), v6PrefixSet)
 
-	if dut.Vendor() == ondatra.NOKIA {
+	if !deviations.UnsupportedTableConnectionRedistribution(dut) {
 		redistributePolicy = redistributeStaticRoute(t, !isV4, metricPropagate, policyResultNext, redistributePolicy)
 	}
 
@@ -1258,7 +1258,7 @@ func redistributeIPv6StaticRoutePolicy(t *testing.T, dut *ondatra.DUTDevice, ate
 
 	gnmi.Replace(t, dut, policyPath.Config(), redistributePolicyDefinition)
 
-	if dut.Vendor() != ondatra.NOKIA {
+	if !deviations.UnsupportedTableConnectionRedistribution(dut) {
 		configureTableConnection(t, dut, !isV4, metricPropagate, redistributeStaticPolicyV6, oc.RoutingPolicy_DefaultPolicyType_ACCEPT_ROUTE)
 	} else {
 		bgpPath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).Protocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP, "BGP").Bgp().Neighbor(atePort1.IPv6).AfiSafi(oc.BgpTypes_AFI_SAFI_TYPE_IPV6_UNICAST).ApplyPolicy().ExportPolicy()
@@ -1405,7 +1405,7 @@ func validateRedistributeRouteWithTagSet(t *testing.T, dut *ondatra.DUTDevice, a
 		policyStatement = policyStatementV6
 	}
 
-	if dut.Vendor() != ondatra.NOKIA {
+	if !deviations.UnsupportedTableConnectionRedistribution(dut) {
 		tcState := gnmi.Get(t, dut, gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).TableConnection(
 			oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_STATIC,
 			oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP,
@@ -1435,7 +1435,7 @@ func validateRedistributeRouteWithTagSet(t *testing.T, dut *ondatra.DUTDevice, a
 	if foundPDef.GetName() != redistributeStaticPolicy {
 		t.Fatal("Expected import policy is not configured")
 	}
-	if dut.Vendor() != ondatra.NOKIA {
+	if !deviations.UseVendorNativeTagSetConfig(dut) {
 		if foundPDef.GetStatement(policyStatement).GetConditions().GetOrCreateMatchTagSet().GetTagSet() != tagSet {
 			t.Fatal("Expected tag-set is not configured")
 		}
@@ -1465,7 +1465,7 @@ func validateRedistributeNullStaticRoute(t *testing.T, dut *ondatra.DUTDevice, a
 		nextHop = "2001:db8::9"
 	}
 
-	if dut.Vendor() != ondatra.NOKIA {
+	if !deviations.UnsupportedTableConnectionRedistribution(dut) {
 		tcState := gnmi.Get(t, dut, gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).TableConnection(
 			oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_STATIC,
 			oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP,
