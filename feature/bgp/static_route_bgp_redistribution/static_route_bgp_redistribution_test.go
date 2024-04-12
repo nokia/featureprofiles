@@ -710,10 +710,10 @@ func validatePrefixSetRoutingPolicy(t *testing.T, dut *ondatra.DUTDevice, isV4 b
 
 // 1.27.1 setup function
 func redistributeIPv4Static(t *testing.T, dut *ondatra.DUTDevice) {
-	if !deviations.UnsupportedTableConnectionRedistribution(dut) {
-		configureTableConnection(t, dut, isV4, !metricPropagate, "", oc.RoutingPolicy_DefaultPolicyType_ACCEPT_ROUTE)
-	} else {
+	if deviations.UnsupportedTableConnectionRedistribution(dut) {
 		configureStaticRedistributionPolicy(t, dut, isV4, acceptRoute, !metricPropagate)
+	} else {
+		configureTableConnection(t, dut, isV4, !metricPropagate, "", oc.RoutingPolicy_DefaultPolicyType_ACCEPT_ROUTE)
 	}
 }
 
@@ -725,10 +725,10 @@ func validateRedistributeIPv4Static(t *testing.T, dut *ondatra.DUTDevice, ate *o
 
 // 1.27.2 setup function
 func redistributeIPv4StaticWithMetricPropagation(t *testing.T, dut *ondatra.DUTDevice) {
-	if !deviations.UnsupportedTableConnectionRedistribution(dut) {
-		configureTableConnection(t, dut, isV4, metricPropagate, "", oc.RoutingPolicy_DefaultPolicyType_ACCEPT_ROUTE)
-	} else {
+	if deviations.UnsupportedTableConnectionRedistribution(dut) {
 		configureStaticRedistributionPolicy(t, dut, isV4, acceptRoute, metricPropagate)
+	} else {
+		configureTableConnection(t, dut, isV4, metricPropagate, "", oc.RoutingPolicy_DefaultPolicyType_ACCEPT_ROUTE)
 	}
 }
 
@@ -740,10 +740,10 @@ func validateRedistributeIPv4StaticWithMetricPropagation(t *testing.T, dut *onda
 
 // 1.27.3 setup function
 func redistributeIPv6Static(t *testing.T, dut *ondatra.DUTDevice) {
-	if !deviations.UnsupportedTableConnectionRedistribution(dut) {
-		configureTableConnection(t, dut, !isV4, !metricPropagate, "", oc.RoutingPolicy_DefaultPolicyType_ACCEPT_ROUTE)
-	} else {
+	if deviations.UnsupportedTableConnectionRedistribution(dut) {
 		configureStaticRedistributionPolicy(t, dut, !isV4, acceptRoute, !metricPropagate)
+	} else {
+		configureTableConnection(t, dut, !isV4, !metricPropagate, "", oc.RoutingPolicy_DefaultPolicyType_ACCEPT_ROUTE)
 	}
 }
 
@@ -755,10 +755,10 @@ func validateRedistributeIPv6Static(t *testing.T, dut *ondatra.DUTDevice, ate *o
 
 // 1.27.4 setup function
 func redistributeIPv6StaticWithMetricPropagation(t *testing.T, dut *ondatra.DUTDevice) {
-	if !deviations.UnsupportedTableConnectionRedistribution(dut) {
-		configureTableConnection(t, dut, !isV4, metricPropagate, "", oc.RoutingPolicy_DefaultPolicyType_ACCEPT_ROUTE)
-	} else {
+	if deviations.UnsupportedTableConnectionRedistribution(dut) {
 		configureStaticRedistributionPolicy(t, dut, !isV4, acceptRoute, metricPropagate)
+	} else {
+		configureTableConnection(t, dut, !isV4, metricPropagate, "", oc.RoutingPolicy_DefaultPolicyType_ACCEPT_ROUTE)
 	}
 }
 
@@ -770,12 +770,12 @@ func validateRedistributeIPv6StaticWithMetricPropagation(t *testing.T, dut *onda
 
 // 1.27.5 setup function
 func redistributeIPv4IPv6StaticDefaultRejectPolicy(t *testing.T, dut *ondatra.DUTDevice) {
-	if !deviations.UnsupportedTableConnectionRedistribution(dut) {
-		configureTableConnection(t, dut, isV4, !metricPropagate, "", oc.RoutingPolicy_DefaultPolicyType_REJECT_ROUTE)
-		configureTableConnection(t, dut, !isV4, !metricPropagate, "", oc.RoutingPolicy_DefaultPolicyType_REJECT_ROUTE)
-	} else {
+	if deviations.UnsupportedTableConnectionRedistribution(dut) {
 		configureStaticRedistributionPolicy(t, dut, isV4, !acceptRoute, !metricPropagate)
 		configureStaticRedistributionPolicy(t, dut, !isV4, !acceptRoute, !metricPropagate)
+	} else {
+		configureTableConnection(t, dut, isV4, !metricPropagate, "", oc.RoutingPolicy_DefaultPolicyType_REJECT_ROUTE)
+		configureTableConnection(t, dut, !isV4, !metricPropagate, "", oc.RoutingPolicy_DefaultPolicyType_REJECT_ROUTE)
 	}
 }
 
@@ -813,7 +813,7 @@ func redistributeIPv4PrefixRoutePolicy(t *testing.T, dut *ondatra.DUTDevice, ate
 
 	gnmi.Replace(t, dut, gnmi.OC().RoutingPolicy().DefinedSets().PrefixSet("prefix-set-v4").Config(), v4PrefixSet)
 
-	if !deviations.UnsupportedTableConnectionRedistribution(dut) {
+	if deviations.UnsupportedTableConnectionRedistribution(dut) {
 		redistributePolicy = redistributeStaticRoute(t, isV4, metricPropagate, policyResultNext, redistributePolicy)
 	}
 
@@ -833,11 +833,11 @@ func redistributeIPv4PrefixRoutePolicy(t *testing.T, dut *ondatra.DUTDevice, ate
 
 	gnmi.Replace(t, dut, policyPath.Config(), redistributePolicyDefinition)
 
-	if !deviations.UnsupportedTableConnectionRedistribution(dut) {
-		configureTableConnection(t, dut, isV4, metricPropagate, redistributeStaticPolicyV4, oc.RoutingPolicy_DefaultPolicyType_ACCEPT_ROUTE)
-	} else {
+	if deviations.UnsupportedTableConnectionRedistribution(dut) {
 		bgpPath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).Protocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP, "BGP").Bgp().Neighbor(atePort1.IPv4).AfiSafi(oc.BgpTypes_AFI_SAFI_TYPE_IPV4_UNICAST).ApplyPolicy().ExportPolicy()
 		gnmi.Replace(t, dut, bgpPath.Config(), []string{redistributeStaticPolicyV4})
+	} else {
+		configureTableConnection(t, dut, isV4, metricPropagate, redistributeStaticPolicyV4, oc.RoutingPolicy_DefaultPolicyType_ACCEPT_ROUTE)
 	}
 
 	sendTraffic(t, ate.OTG())
@@ -869,7 +869,7 @@ func redistributeStaticRoutePolicyWithASN(t *testing.T, dut *ondatra.DUTDevice, 
 	dutOcRoot := &oc.Root{}
 	redistributePolicy := dutOcRoot.GetOrCreateRoutingPolicy()
 
-	if !deviations.UnsupportedTableConnectionRedistribution(dut) {
+	if deviations.UnsupportedTableConnectionRedistribution(dut) {
 		redistributePolicy = redistributeStaticRoute(t, isV4, metricPropagate, policyResultNext, redistributePolicy)
 	}
 
@@ -889,10 +889,10 @@ func redistributeStaticRoutePolicyWithASN(t *testing.T, dut *ondatra.DUTDevice, 
 
 	gnmi.Replace(t, dut, policyPath.Config(), redistributePolicyDefinition)
 
-	if !deviations.UnsupportedTableConnectionRedistribution(dut) {
-		configureTableConnection(t, dut, isV4, metricPropagate, redistributeStaticPolicy, oc.RoutingPolicy_DefaultPolicyType_ACCEPT_ROUTE)
-	} else {
+	if deviations.UnsupportedTableConnectionRedistribution(dut) {
 		gnmi.Replace(t, dut, bgpPath.Config(), []string{redistributeStaticPolicy})
+	} else {
+		configureTableConnection(t, dut, isV4, metricPropagate, redistributeStaticPolicy, oc.RoutingPolicy_DefaultPolicyType_ACCEPT_ROUTE)
 	}
 }
 
@@ -914,7 +914,7 @@ func redistributeStaticRoutePolicyWithMED(t *testing.T, dut *ondatra.DUTDevice, 
 	redistributePolicy := dutOcRoot.GetOrCreateRoutingPolicy()
 	redistributePolicyDefinition := redistributePolicy.GetOrCreatePolicyDefinition(redistributeStaticPolicy)
 
-	if !deviations.UnsupportedTableConnectionRedistribution(dut) {
+	if deviations.UnsupportedTableConnectionRedistribution(dut) {
 		redistributePolicy = redistributeStaticRoute(t, isV4, metricPropagate, policyResultNext, redistributePolicy)
 	}
 
@@ -929,10 +929,10 @@ func redistributeStaticRoutePolicyWithMED(t *testing.T, dut *ondatra.DUTDevice, 
 
 	gnmi.Replace(t, dut, policyPath.Config(), redistributePolicyDefinition)
 
-	if !deviations.UnsupportedTableConnectionRedistribution(dut) {
-		configureTableConnection(t, dut, isV4, metricPropagate, redistributeStaticPolicy, oc.RoutingPolicy_DefaultPolicyType_ACCEPT_ROUTE)
-	} else {
+	if deviations.UnsupportedTableConnectionRedistribution(dut) {
 		gnmi.Replace(t, dut, bgpPath.Config(), []string{redistributeStaticPolicy})
+	} else {
+		configureTableConnection(t, dut, isV4, metricPropagate, redistributeStaticPolicy, oc.RoutingPolicy_DefaultPolicyType_ACCEPT_ROUTE)
 	}
 }
 
@@ -955,7 +955,7 @@ func redistributeStaticRoutePolicyWithLocalPreference(t *testing.T, dut *ondatra
 	redistributePolicy := dutOcRoot.GetOrCreateRoutingPolicy()
 	redistributePolicyDefinition := redistributePolicy.GetOrCreatePolicyDefinition(redistributeStaticPolicy)
 
-	if !deviations.UnsupportedTableConnectionRedistribution(dut) {
+	if deviations.UnsupportedTableConnectionRedistribution(dut) {
 		redistributePolicy = redistributeStaticRoute(t, isV4, metricPropagate, policyResultNext, redistributePolicy)
 	}
 
@@ -970,10 +970,10 @@ func redistributeStaticRoutePolicyWithLocalPreference(t *testing.T, dut *ondatra
 
 	gnmi.Replace(t, dut, policyPath.Config(), redistributePolicyDefinition)
 
-	if !deviations.UnsupportedTableConnectionRedistribution(dut) {
-		configureTableConnection(t, dut, isV4, metricPropagate, redistributeStaticPolicy, oc.RoutingPolicy_DefaultPolicyType_ACCEPT_ROUTE)
-	} else {
+	if deviations.UnsupportedTableConnectionRedistribution(dut) {
 		gnmi.Replace(t, dut, bgpPath.Config(), []string{redistributeStaticPolicy})
+	} else {
+		configureTableConnection(t, dut, isV4, metricPropagate, redistributeStaticPolicy, oc.RoutingPolicy_DefaultPolicyType_ACCEPT_ROUTE)
 	}
 }
 
@@ -1006,7 +1006,7 @@ func redistributeStaticRoutePolicyWithCommunitySet(t *testing.T, dut *ondatra.DU
 	gnmi.Replace(t, dut, policyPath.Config(), redistributePolicyDefinition)
 	gnmi.Replace(t, dut, communityPath.Config(), communitySetPolicyDefinition)
 
-	if !deviations.UnsupportedTableConnectionRedistribution(dut) {
+	if deviations.UnsupportedTableConnectionRedistribution(dut) {
 		redistributePolicy = redistributeStaticRoute(t, isV4, metricPropagate, policyResultNext, redistributePolicy)
 	}
 
@@ -1022,10 +1022,10 @@ func redistributeStaticRoutePolicyWithCommunitySet(t *testing.T, dut *ondatra.DU
 
 	gnmi.Replace(t, dut, policyPath.Config(), redistributePolicyDefinition)
 
-	if !deviations.UnsupportedTableConnectionRedistribution(dut) {
-		configureTableConnection(t, dut, isV4, metricPropagate, redistributeStaticPolicy, oc.RoutingPolicy_DefaultPolicyType_ACCEPT_ROUTE)
-	} else {
+	if deviations.UnsupportedTableConnectionRedistribution(dut) {
 		gnmi.Replace(t, dut, bgpPath.Config(), []string{redistributeStaticPolicy})
+	} else {
+		configureTableConnection(t, dut, isV4, metricPropagate, redistributeStaticPolicy, oc.RoutingPolicy_DefaultPolicyType_ACCEPT_ROUTE)
 	}
 }
 
@@ -1050,7 +1050,7 @@ func redistributeStaticRoutePolicyWithTagSet(t *testing.T, dut *ondatra.DUTDevic
 	redistributePolicy := dutOcRoot.GetOrCreateRoutingPolicy()
 	redistributePolicyDefinition := redistributePolicy.GetOrCreatePolicyDefinition(redistributeStaticPolicy)
 
-	if !deviations.UnsupportedTableConnectionRedistribution(dut) {
+	if deviations.UnsupportedTableConnectionRedistribution(dut) {
 		redistributePolicy = redistributeStaticRoute(t, isV4, !metricPropagate, policyResultNext, redistributePolicy)
 		gnmi.Replace(t, dut, policyPath.Config(), redistributePolicyDefinition)
 		configureRoutingPolicyTagSet(t, dut, isV4, tagSetValue)
@@ -1108,7 +1108,7 @@ func redistributeIPv4NullStaticRoute(t *testing.T, dut *ondatra.DUTDevice, ate *
 	redistributePolicy := dutOcRoot.GetOrCreateRoutingPolicy()
 	redistributePolicyDefinition := redistributePolicy.GetOrCreatePolicyDefinition(redistributeStaticPolicyV4)
 
-	if !deviations.UnsupportedTableConnectionRedistribution(dut) {
+	if deviations.UnsupportedTableConnectionRedistribution(dut) {
 		redistributePolicy = redistributeStaticRoute(t, isV4, !metricPropagate, policyResultNext, redistributePolicy)
 
 		statementV4, err := redistributePolicyDefinition.AppendNewStatement(policyStatementV4)
@@ -1162,7 +1162,7 @@ func redistributeIPv6NullStaticRoute(t *testing.T, dut *ondatra.DUTDevice, ate *
 	networkInstanceProtocolStatic := networkInstance.GetOrCreateProtocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_STATIC, "static")
 	networkInstanceProtocolStatic.SetEnabled(true)
 	ipv6StaticRoute := networkInstanceProtocolStatic.GetOrCreateStatic("2024:db8:64:64::/64")
-	if !deviations.UseVendorNativeACLConfig(dut) {
+	if !deviations.UseVendorNativeTagSetConfig(dut) {
 		ipv6StaticRoute.SetSetTag(oc.UnionString("60"))
 	} else {
 		configureStaticRouteTagSet(t, dut)
@@ -1175,7 +1175,7 @@ func redistributeIPv6NullStaticRoute(t *testing.T, dut *ondatra.DUTDevice, ate *
 	redistributePolicy := dutOcRoot.GetOrCreateRoutingPolicy()
 	redistributePolicyDefinition := redistributePolicy.GetOrCreatePolicyDefinition(redistributeStaticPolicyV6)
 
-	if !deviations.UnsupportedTableConnectionRedistribution(dut) {
+	if deviations.UnsupportedTableConnectionRedistribution(dut) {
 		redistributePolicy = redistributeStaticRoute(t, !isV4, !metricPropagate, policyResultNext, redistributePolicy)
 
 		statementV6, err := redistributePolicyDefinition.AppendNewStatement(policyStatementV6)
@@ -1238,7 +1238,7 @@ func redistributeIPv6StaticRoutePolicy(t *testing.T, dut *ondatra.DUTDevice, ate
 
 	gnmi.Replace(t, dut, gnmi.OC().RoutingPolicy().DefinedSets().PrefixSet("prefix-set-v6").Config(), v6PrefixSet)
 
-	if !deviations.UnsupportedTableConnectionRedistribution(dut) {
+	if deviations.UnsupportedTableConnectionRedistribution(dut) {
 		redistributePolicy = redistributeStaticRoute(t, !isV4, metricPropagate, policyResultNext, redistributePolicy)
 	}
 
@@ -1258,11 +1258,11 @@ func redistributeIPv6StaticRoutePolicy(t *testing.T, dut *ondatra.DUTDevice, ate
 
 	gnmi.Replace(t, dut, policyPath.Config(), redistributePolicyDefinition)
 
-	if !deviations.UnsupportedTableConnectionRedistribution(dut) {
-		configureTableConnection(t, dut, !isV4, metricPropagate, redistributeStaticPolicyV6, oc.RoutingPolicy_DefaultPolicyType_ACCEPT_ROUTE)
-	} else {
+	if deviations.UnsupportedTableConnectionRedistribution(dut) {
 		bgpPath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).Protocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP, "BGP").Bgp().Neighbor(atePort1.IPv6).AfiSafi(oc.BgpTypes_AFI_SAFI_TYPE_IPV6_UNICAST).ApplyPolicy().ExportPolicy()
 		gnmi.Replace(t, dut, bgpPath.Config(), []string{redistributeStaticPolicyV6})
+	} else {
+		configureTableConnection(t, dut, !isV4, metricPropagate, redistributeStaticPolicyV6, oc.RoutingPolicy_DefaultPolicyType_ACCEPT_ROUTE)
 	}
 
 	sendTraffic(t, ate.OTG())
