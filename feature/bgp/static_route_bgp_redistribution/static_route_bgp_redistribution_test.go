@@ -1360,7 +1360,7 @@ func validatePrefixCommunitySet(t *testing.T, ate *ondatra.ATEDevice, isV4 bool,
 					gotCommunitySet = fmt.Sprint(gotCommunityNumber) + ":" + fmt.Sprint(gotCommunityValue)
 				}
 				t.Logf("Prefix %v learned with CommunitySet : %v", prefix.GetAddress(), gotCommunitySet)
-				return gotCommunitySet != wantCommunitySet
+				return gotCommunitySet == wantCommunitySet
 			}
 			return false
 		}).Await(t)
