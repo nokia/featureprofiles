@@ -125,7 +125,7 @@ func TestRouteSummaryWithISIS(t *testing.T) {
 
 	configureOTG(t, ts)
 	gnmi.Watch(t, otg, gnmi.OTG().IsisRouter("devIsis").Counters().Level2().InLsp().State(), 30*time.Second, func(v *ygnmi.Value[uint64]) bool {
-		time.Sleep(5 * time.Second)
+		time.Sleep(10 * time.Second)
 		val, present := v.Val()
 		return present && val >= 1
 	}).Await(t)
