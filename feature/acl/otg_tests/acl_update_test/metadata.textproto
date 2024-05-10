@@ -1,0 +1,18 @@
+# proto-file: github.com/openconfig/featureprofiles/proto/metadata.proto
+# proto-message: Metadata
+
+plan_id: "ACL-1.2"
+description: "ACL Update (Make-before-break)"
+testbed: TESTBED_DUT_ATE_2LINKS
+tags: TAGS_AGGREGATION
+platform_exceptions:  {
+  platform:  {
+    vendor:  NOKIA
+  }
+  deviations:  {
+    explicit_interface_in_default_vrf:  true
+    static_protocol_name:  "static"
+    interface_enabled:  true
+  }
+}
+
