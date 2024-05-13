@@ -15,6 +15,8 @@
 package acl_update_test
 
 import (
+	"context"
+	"encoding/json"
 	"os"
 	"testing"
 	"time"
@@ -23,7 +25,7 @@ import (
 	"github.com/openconfig/featureprofiles/internal/attrs"
 	"github.com/openconfig/featureprofiles/internal/deviations"
 	"github.com/openconfig/featureprofiles/internal/fptest"
-	// gpb "github.com/openconfig/gnmi/proto/gnmi"
+	gpb "github.com/openconfig/gnmi/proto/gnmi"
 	"github.com/openconfig/ondatra"
 	"github.com/openconfig/ondatra/gnmi"
 	"github.com/openconfig/ondatra/gnmi/oc"
@@ -67,6 +69,7 @@ const (
 	lossTolerance = 2
 	prefix        = "0.0.0.0/0"
 	nexthop       = "192.0.2.6"
+	isV4          = true
 )
 
 var (
@@ -140,7 +143,7 @@ func configACLIngressInterface(t *testing.T, dut *ondatra.DUTDevice, ifName stri
 
 	aSet := d1.GetOrCreateAcl().GetOrCreateAclSet(aclNameV4, oc.Acl_ACL_TYPE_ACL_IPV4)
 	aSet.GetOrCreateAclEntry(10).GetOrCreateIpv4().SetSourceAddress(flowSrcAddrV4)
-	aSet.GetOrCreateAclEntry(10).GetOrCreateActions().SetForwardingAction(oc.Acl_FORWARDING_ACTION_DROP)
+	// aSet.GetOrCreateAclEntry(10).GetOrCreateActions().SetForwardingAction(oc.Acl_FORWARDING_ACTION_DROP)
 	aSet.GetOrCreateAclEntry(10).GetOrCreateActions().SetForwardingAction(oc.Acl_FORWARDING_ACTION_ACCEPT)
 	aSet.GetOrCreateAclEntry(20).GetOrCreateIpv4().SetDestinationAddress(flowDstAddrV4)
 	aSet.GetOrCreateAclEntry(20).GetOrCreateActions().SetForwardingAction(oc.Acl_FORWARDING_ACTION_ACCEPT)
@@ -158,15 +161,66 @@ func configACLIngressInterface(t *testing.T, dut *ondatra.DUTDevice, ifName stri
 	fptest.LogQuery(t, "ACL config:\n", aclConf.Config(), gnmi.Get(t, dut, aclConf.Config()))
 }
 
-// configACLInterface configures the ACL attachment on interface
-func validateMatchedPackets(t *testing.T, dut *ondatra.DUTDevice, ifName string) {
+func configureACLStatisticsPerEntry(t *testing.T, dut *ondatra.DUTDevice, aclFilter string, isV4 bool) {
 
-	// aclCounter := gnmi.OC().Acl().Interface(ifName).IngressAclSet(aclNameV4, oc.Acl_ACL_TYPE_ACL_IPV4).AclEntry(10).MatchedPackets().State()
-	aclCounter := gnmi.OC().Acl().AclSet(aclNameV4, oc.Acl_ACL_TYPE_ACL_IPV4).AclEntry(10).MatchedPackets().State()
+	filterType := "ipv4"
+	if !isV4 {
+		filterType = "ipv6"
+	}
+
+	var statisticsPerEntry = []any{
+		map[string]any{
+			"statistics-per-entry": true,
+		},
+	}
+	statisticsEnabled, err := json.Marshal(statisticsPerEntry)
+	if err != nil {
+		t.Fatalf("Error with json Marshal: %v", err)
+	}
+
+	update := []*gpb.Update{
+		{
+			Path: &gpb.Path{
+				Elem: []*gpb.PathElem{
+					{Name: "acl"},
+					{Name: "acl-filter", Key: map[string]string{"name": aclFilter, "type": filterType}},
+				},
+			},
+			Val: &gpb.TypedValue{
+				Value: &gpb.TypedValue_JsonIetfVal{
+					JsonIetfVal: statisticsEnabled,
+				},
+			},
+		},
+	}
+
+	gpbSetRequest := &gpb.SetRequest{
+		Prefix: &gpb.Path{
+			Origin: "native",
+		},
+		Update: update,
+	}
+
+	gnmiClient := dut.RawAPIs().GNMI(t)
+	if _, err := gnmiClient.Set(context.Background(), gpbSetRequest); err != nil {
+		t.Fatalf("Unexpected error updating SRL routing-policy default-action: %v", err)
+	}
+	time.Sleep(5 * time.Second)
+}
+
+// configACLInterface configures the ACL attachment on interface
+func validateMatchedPackets(t *testing.T, dut *ondatra.DUTDevice, aclFilter string, isV4 bool) {
+
+	aclType := oc.Acl_ACL_TYPE_ACL_IPV4
+	if !isV4 {
+		aclType = oc.Acl_ACL_TYPE_ACL_IPV6
+	}
+
+	time.Sleep(10 * time.Second)
+	aclCounter := gnmi.OC().Acl().AclSet(aclFilter, aclType).AclEntry(10).MatchedPackets().State()
 	t.Logf("Matched Packets ingress-10 :%v", gnmi.Get(t, dut, aclCounter))
 
-	// aclCounter2 := gnmi.OC().Acl().Interface(ifName).IngressAclSet(aclNameV4, oc.Acl_ACL_TYPE_ACL_IPV4).AclEntry(20).MatchedPackets().State()
-	aclCounter2 := gnmi.OC().Acl().AclSet(aclNameV4, oc.Acl_ACL_TYPE_ACL_IPV4).AclEntry(20).MatchedPackets().State()
+	aclCounter2 := gnmi.OC().Acl().AclSet(aclFilter, aclType).AclEntry(20).MatchedPackets().State()
 	t.Logf("Matched Packets ingress-20 :%v", gnmi.Get(t, dut, aclCounter2))
 
 }
@@ -283,11 +337,12 @@ func TestACL(t *testing.T) {
 
 	ifName := dut.Port(t, "port1").Name()
 	configACLIngressInterface(t, dut, ifName)
+	configureACLStatisticsPerEntry(t, dut, aclNameV4, isV4)
 
 	t.Log("send Traffic statistics")
 	sendTraffic(t, otg)
 	captureTrafficStats(t, otg, config)
-	validateMatchedPackets(t, dut, ifName)
+	validateMatchedPackets(t, dut, aclNameV4, isV4)
 
 	t.Logf("Time check: %s", time.Since(start))
 	t.Logf("Test run time: %s", time.Since(start))
