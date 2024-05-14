@@ -95,45 +95,60 @@ B <-- IBGP+IS-IS --> C[Port2:OTG];
     * DUT:Port2 should accept import of IPv4-prefix4, IPv4-prefix5, IPv4-prefix6, IPv6-prefix4, IPv6-prefix5 and IPv6-prefix6
     * DUT:Port2 wouldn't export routes to IPv4-prefix1, IPv4-prefix2, IPv4-prefix3, IPv6-prefix1, IPv6-prefix2 and IPv6-prefix3 since they are missing from the DUT's forwarding table.
     * IS-IS and static routes shouldn't be advertised to the EBGP and IBGP peers.
-   
-### Config Parameter Coverage
 
-  * Defined Sets
-    * /routing-policy/defined-sets/prefix-sets/prefix-set/
-    * /routing-policy/defined-sets/prefix-sets/prefix-set/prefixes/prefix/config/ip-prefix
-    * /routing-policy/defined-sets/prefix-sets/prefix-set/prefixes/prefix/config/masklength-range/exact
 
-  * Policy-Definition
-    * /routing-policy/policy-definitions/policy-definition/config/name
-    * /routing-policy/policy-definitions/policy-definition/statements/statement/config/name
-    * /routing-policy/policy-definitions/policy-definition/statements/statement/conditions/match-prefix-set/config/prefix-set
-    * /routing-policy/policy-definitions/policy-definition/statements/statement/conditions/match-prefix-set/config/match-set-options
-    * /routing-policy/policy-definitions/policy-definition/statements/statement/actions/config/policy-result/ACCEPT_ROUTE
-    * /routing-policy/policy-definitions/policy-definition/statements/statement/actions/config/policy-result/REJECT_ROUTE
+## OpenConfig Path and RPC Coverage
 
-  * Path to Neighbor or Peer-Group level
-    * /network-instances/network-instance/protocols/protocol/bgp/neighbors/neighbor/
-    * /network-instances/network-instance/protocols/protocol/bgp/neighbors/peer-group/
+```yaml
+paths:
+  ## Config Paths ##
+
+  # Defined Sets
+  /routing-policy/defined-sets/prefix-sets/prefix-set/
+  /routing-policy/defined-sets/prefix-sets/prefix-set/prefixes/prefix/config/ip-prefix
+  /routing-policy/defined-sets/prefix-sets/prefix-set/prefixes/prefix/config/masklength-range/exact
+
+  # Policy-Definition
+  /routing-policy/policy-definitions/policy-definition/config/name
+  /routing-policy/policy-definitions/policy-definition/statements/statement/config/name
+  /routing-policy/policy-definitions/policy-definition/statements/statement/conditions/match-prefix-set/config/prefix-set
+  /routing-policy/policy-definitions/policy-definition/statements/statement/conditions/match-prefix-set/config/match-set-options
+  /routing-policy/policy-definitions/policy-definition/statements/statement/actions/config/policy-result/ACCEPT_ROUTE
+  /routing-policy/policy-definitions/policy-definition/statements/statement/actions/config/policy-result/REJECT_ROUTE
+
+  # Path to Neighbor or Peer-Group level
+  /network-instances/network-instance/protocols/protocol/bgp/neighbors/neighbor/
+  /network-instances/network-instance/protocols/protocol/bgp/neighbors/peer-group/
       
-  * Apply Policy at Neighbor or Peer-Group level
-    * afi-safis/afi-safi/apply-policy/config/import-policy
-    * afi-safis/afi-safi/apply-policy/config/export-policy
-    * afi-safis/afi-safi/apply-policy/config/default-import-policy/ACCEPT-ALL
-    * afi-safis/afi-safi/apply-policy/config/default-export-policy/ACCEPT-ALL
-    * afi-safis/afi-safi/apply-policy/config/default-import-policy/REJECT-ALL
-    * afi-safis/afi-safi/apply-policy/config/default-export-policy/REJECT-ALL
+  # Apply Policy at Neighbor or Peer-Group level
+  afi-safis/afi-safi/apply-policy/config/import-policy
+  afi-safis/afi-safi/apply-policy/config/export-policy
+  afi-safis/afi-safi/apply-policy/config/default-import-policy/ACCEPT-ALL
+  afi-safis/afi-safi/apply-policy/config/default-export-policy/ACCEPT-ALL
+  afi-safis/afi-safi/apply-policy/config/default-import-policy/REJECT-ALL
+  afi-safis/afi-safi/apply-policy/config/default-export-policy/REJECT-ALL
 
 
-### Telemetry Parameter Coverage
+  ## State Paths ##
 
-  * Path to Neighbor or Peer-Group level:
-    * /network-instances/network-instance/protocols/protocol/bgp/neighbors/neighbor
-    * /network-instances/network-instance/protocols/protocol/bgp/peer-groups/peer-group
+  # Path to Neighbor or Peer-Group level:
+  /network-instances/network-instance/protocols/protocol/bgp/neighbors/neighbor
+  /network-instances/network-instance/protocols/protocol/bgp/peer-groups/peer-group
 
-  * Paths under Neighbor and Peer-Group level:
-    * afi-safis/afi-safi/apply-policy/state/export-policy
-    * afi-safis/afi-safi/apply-policy/state/import-policy
-    * afi-safis/afi-safi/state/prefixes/installed
-    * afi-safis/afi-safi/state/prefixes/received
-    * afi-safis/afi-safi/state/prefixes/received-pre-policy
-    * afi-safis/afi-safi/state/prefixes/sent
+  # Paths under Neighbor and Peer-Group level:
+  afi-safis/afi-safi/apply-policy/state/export-policy
+  afi-safis/afi-safi/apply-policy/state/import-policy
+  afi-safis/afi-safi/state/prefixes/installed
+  afi-safis/afi-safi/state/prefixes/received
+  afi-safis/afi-safi/state/prefixes/received-pre-policy
+  afi-safis/afi-safi/state/prefixes/sent
+
+rpcs:
+  gnmi:
+    gNMI.Set:
+      Replace: true
+      Update: true
+    gNMI.Get:
+    gNMI.Subscribe:
+      on_change: true
+```
