@@ -171,7 +171,7 @@ func configureACLStatisticsPerEntry(t *testing.T, dut *ondatra.DUTDevice, aclFil
 	var statisticsPerEntry = []any{
 		map[string]any{
 			"statistics-per-entry":  true,
-			"subinterface-specific": "input-only",
+			"subinterface-specific": "input-and-output",
 		},
 	}
 	statisticsEnabled, err := json.Marshal(statisticsPerEntry)
@@ -217,18 +217,19 @@ func validateMatchedPackets(t *testing.T, dut *ondatra.DUTDevice, aclFilter, ifN
 		aclType = oc.Acl_ACL_TYPE_ACL_IPV6
 	}
 
-	time.Sleep(10 * time.Second)
-	aclCounter := gnmi.OC().Acl().AclSet(aclFilter, aclType).AclEntry(10).MatchedPackets().State()
-	t.Logf("Matched Packets ingress-10 :%v", gnmi.Get(t, dut, aclCounter))
-
+	time.Sleep(20 * time.Second)
 	aclIntfCounter := gnmi.OC().Acl().Interface(ifName).IngressAclSet(aclFilter, aclType).AclEntry(10).MatchedPackets().State()
-	t.Logf("Matched Packets ingress-10 :%v", gnmi.Get(t, dut, aclIntfCounter))
-
-	aclCounter2 := gnmi.OC().Acl().AclSet(aclFilter, aclType).AclEntry(20).MatchedPackets().State()
-	t.Logf("Intf Matched Packets ingress-20 :%v", gnmi.Get(t, dut, aclCounter2))
+	t.Logf("Intf Matched Packets ingress-10 :%v", gnmi.Get(t, dut, aclIntfCounter))
 
 	aclIntfCounter2 := gnmi.OC().Acl().Interface(ifName).IngressAclSet(aclFilter, aclType).AclEntry(20).MatchedPackets().State()
 	t.Logf("Intf Matched Packets ingress-20 :%v", gnmi.Get(t, dut, aclIntfCounter2))
+
+	// Below stats work when "subinterface-specific" is not configured in native-yang
+	// aclCounter := gnmi.OC().Acl().AclSet(aclFilter, aclType).AclEntry(10).MatchedPackets().State()
+	// t.Logf("Matched Packets ingress-10 :%v", gnmi.Get(t, dut, aclCounter))
+
+	// aclCounter2 := gnmi.OC().Acl().AclSet(aclFilter, aclType).AclEntry(20).MatchedPackets().State()
+	// t.Logf("Intf Matched Packets ingress-20 :%v", gnmi.Get(t, dut, aclCounter2))
 
 }
 
