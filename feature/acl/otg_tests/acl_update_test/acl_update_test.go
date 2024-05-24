@@ -170,7 +170,8 @@ func configureACLStatisticsPerEntry(t *testing.T, dut *ondatra.DUTDevice, aclFil
 
 	var statisticsPerEntry = []any{
 		map[string]any{
-			"statistics-per-entry": true,
+			"statistics-per-entry":  true,
+			"subinterface-specific": "input-only",
 		},
 	}
 	statisticsEnabled, err := json.Marshal(statisticsPerEntry)
@@ -203,13 +204,13 @@ func configureACLStatisticsPerEntry(t *testing.T, dut *ondatra.DUTDevice, aclFil
 
 	gnmiClient := dut.RawAPIs().GNMI(t)
 	if _, err := gnmiClient.Set(context.Background(), gpbSetRequest); err != nil {
-		t.Fatalf("Unexpected error updating SRL routing-policy default-action: %v", err)
+		t.Fatalf("Unexpected error configuring SRL acl-filter statistics: %v", err)
 	}
 	time.Sleep(5 * time.Second)
 }
 
 // configACLInterface configures the ACL attachment on interface
-func validateMatchedPackets(t *testing.T, dut *ondatra.DUTDevice, aclFilter string, isV4 bool) {
+func validateMatchedPackets(t *testing.T, dut *ondatra.DUTDevice, aclFilter, ifName string, isV4 bool) {
 
 	aclType := oc.Acl_ACL_TYPE_ACL_IPV4
 	if !isV4 {
@@ -220,8 +221,14 @@ func validateMatchedPackets(t *testing.T, dut *ondatra.DUTDevice, aclFilter stri
 	aclCounter := gnmi.OC().Acl().AclSet(aclFilter, aclType).AclEntry(10).MatchedPackets().State()
 	t.Logf("Matched Packets ingress-10 :%v", gnmi.Get(t, dut, aclCounter))
 
+	aclIntfCounter := gnmi.OC().Acl().Interface(ifName).IngressAclSet(aclFilter, aclType).AclEntry(10).MatchedPackets().State()
+	t.Logf("Matched Packets ingress-10 :%v", gnmi.Get(t, dut, aclIntfCounter))
+
 	aclCounter2 := gnmi.OC().Acl().AclSet(aclFilter, aclType).AclEntry(20).MatchedPackets().State()
-	t.Logf("Matched Packets ingress-20 :%v", gnmi.Get(t, dut, aclCounter2))
+	t.Logf("Intf Matched Packets ingress-20 :%v", gnmi.Get(t, dut, aclCounter2))
+
+	aclIntfCounter2 := gnmi.OC().Acl().Interface(ifName).IngressAclSet(aclFilter, aclType).AclEntry(20).MatchedPackets().State()
+	t.Logf("Intf Matched Packets ingress-20 :%v", gnmi.Get(t, dut, aclIntfCounter2))
 
 }
 
@@ -284,6 +291,7 @@ func sendTraffic(t *testing.T, ate *ondatra.ATEDevice) {
 	cs := gosnappi.NewControlState()
 	cs.Port().Capture().SetState(gosnappi.StatePortCaptureState.START)
 	otg.SetControlState(t, cs)
+	time.Sleep(30 * time.Second)
 	t.Log("Starting traffic")
 	otg.StartTraffic(t)
 	time.Sleep(15 * time.Second)
@@ -342,7 +350,7 @@ func TestACL(t *testing.T) {
 	t.Log("send Traffic statistics")
 	sendTraffic(t, otg)
 	captureTrafficStats(t, otg, config)
-	validateMatchedPackets(t, dut, aclNameV4, isV4)
+	validateMatchedPackets(t, dut, aclNameV4, ifName, isV4)
 
 	t.Logf("Time check: %s", time.Since(start))
 	t.Logf("Test run time: %s", time.Since(start))
