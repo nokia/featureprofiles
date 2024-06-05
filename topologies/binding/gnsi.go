@@ -15,14 +15,15 @@
 package binding
 
 import (
-	"github.com/openconfig/ondatra/binding"
-	"google.golang.org/grpc"
-
+	attestzpb "github.com/openconfig/attestz/proto/tpm_attestz"
+	enrollzpb "github.com/openconfig/attestz/proto/tpm_enrollz"
 	accpb "github.com/openconfig/gnsi/acctz"
 	authzpb "github.com/openconfig/gnsi/authz"
 	certzpb "github.com/openconfig/gnsi/certz"
 	credpb "github.com/openconfig/gnsi/credentialz"
 	pathzpb "github.com/openconfig/gnsi/pathz"
+	"github.com/openconfig/ondatra/binding"
+	"google.golang.org/grpc"
 )
 
 // gnsiConn implements the stub builder needed by the Ondatra
@@ -42,6 +43,13 @@ func (g gnsiConn) Credentialz() credpb.CredentialzClient {
 }
 func (g gnsiConn) Acctz() accpb.AcctzClient {
 	return accpb.NewAcctzClient(g.conn)
+}
+func (g gnsiConn) Enrollz() enrollzpb.TpmEnrollzServiceClient {
+	return enrollzpb.NewTpmEnrollzServiceClient(g.conn)
+}
+
+func (g gnsiConn) Attestz() attestzpb.TpmAttestzServiceClient {
+	return attestzpb.NewTpmAttestzServiceClient(g.conn)
 }
 
 var _ = binding.GNSIClients(gnsiConn{})
