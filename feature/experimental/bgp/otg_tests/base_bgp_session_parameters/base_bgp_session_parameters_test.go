@@ -20,7 +20,7 @@ import (
 
 	"github.com/open-traffic-generator/snappi/gosnappi"
 	"github.com/openconfig/featureprofiles/internal/attrs"
-	"github.com/openconfig/featureprofiles/internal/confirm"
+	// "github.com/openconfig/featureprofiles/internal/confirm"
 	"github.com/openconfig/featureprofiles/internal/deviations"
 	"github.com/openconfig/featureprofiles/internal/fptest"
 	"github.com/openconfig/ondatra"
@@ -364,6 +364,1451 @@ func TestEstablishAndDisconnect(t *testing.T) {
 	bgpClearConfig(t, dut)
 }
 
+func TestEstablishAndDisconnect2(t *testing.T) {
+	// DUT configurations.
+	t.Log("Start DUT config load:")
+	dut := ondatra.DUT(t, "dut")
+
+	// Configure interface on the DUT
+	t.Log("Start DUT interface Config")
+	configureDUT(t, dut)
+
+	// Configure Network instance type on DUT
+	t.Log("Configure Network Instance")
+	fptest.ConfigureDefaultNetworkInstance(t, dut)
+
+	t.Log("Configure BGP")
+	dutConfPath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).Protocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP, "BGP")
+	statePath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).Protocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP, "BGP").Bgp()
+	nbrPath := statePath.Neighbor(ateAttrs.IPv4)
+
+	bgpClearConfig(t, dut)
+	dutConf := bgpCreateNbr(&bgpTestParams{localAS: dutAS, peerAS: ateAS}, dut)
+	gnmi.Replace(t, dut, dutConfPath.Config(), dutConf)
+	t.Log("Configure matching Md5 auth password on DUT")
+	gnmi.Replace(t, dut, dutConfPath.Bgp().Neighbor(ateAttrs.IPv4).AuthPassword().Config(), authPassword)
+
+	fptest.LogQuery(t, "DUT BGP Config", dutConfPath.Config(), gnmi.Get(t, dut, dutConfPath.Config()))
+
+	// ATE Configuration.
+	t.Log("Configure port and BGP configs on ATE")
+	ate := ondatra.ATE(t, "ate")
+	topo := configureATE(t, &bgpTestParams{localAS: ateAS, peerIP: dutAttrs.IPv4}, connExternal, md5Auth)
+
+	t.Log("Pushing config to ATE and starting protocols...")
+	otg := ate.OTG()
+	otg.PushConfig(t, topo)
+	otg.StartProtocols(t)
+
+	// Verify Port Status
+	t.Log("Verifying port status")
+	verifyPortsUp(t, dut.Device)
+
+	// Verify BGP status
+	t.Log("Check BGP parameters")
+	verifyBgpTelemetry(t, dut)
+
+	// Verify BGP capabilities
+	t.Log("Check BGP Capabilities")
+	verifyBGPCapabilities(t, dut)
+
+	// Send Cease Notification from ATE to DUT
+	t.Log("Send Cease Notification from OTG to DUT -- ")
+	otg.SetControlAction(t, createCeaseAction(t))
+	t.Log("Verify BGP session state : NOT in ESTABLISHED State")
+	_, ok := gnmi.Watch(t, dut, nbrPath.SessionState().State(), time.Second*60, func(val *ygnmi.Value[oc.E_Bgp_Neighbor_SessionState]) bool {
+		currBgpState, present := val.Val()
+		return present && currBgpState != oc.Bgp_Neighbor_SessionState_ESTABLISHED
+	}).Await(t)
+	if !ok {
+		t.Errorf("BGP neighborship is UP when cease Notification message is recieved")
+	}
+
+	// Verify if Cease notification is received on DUT.
+	t.Log("Verify Error code received on DUT: BgpTypes_BGP_ERROR_CODE_CEASE")
+	_, codeok := gnmi.Watch(t, dut, nbrPath.Messages().Received().LastNotificationErrorCode().State(), 60*time.Second, func(val *ygnmi.Value[oc.E_BgpTypes_BGP_ERROR_CODE]) bool {
+		code, present := val.Val()
+		t.Logf("On disconnect, received code status %v", present)
+		return present && code == oc.BgpTypes_BGP_ERROR_CODE_CEASE
+	}).Await(t)
+	if !codeok {
+		t.Errorf("On disconnect: expected error code %v", oc.BgpTypes_BGP_ERROR_CODE_CEASE)
+	}
+
+	// Clear config on DUT and ATE
+	otg.StopProtocols(t)
+	bgpClearConfig(t, dut)
+}
+
+func TestEstablishAndDisconnect3(t *testing.T) {
+	// DUT configurations.
+	t.Log("Start DUT config load:")
+	dut := ondatra.DUT(t, "dut")
+
+	// Configure interface on the DUT
+	t.Log("Start DUT interface Config")
+	configureDUT(t, dut)
+
+	// Configure Network instance type on DUT
+	t.Log("Configure Network Instance")
+	fptest.ConfigureDefaultNetworkInstance(t, dut)
+
+	t.Log("Configure BGP")
+	dutConfPath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).Protocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP, "BGP")
+	statePath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).Protocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP, "BGP").Bgp()
+	nbrPath := statePath.Neighbor(ateAttrs.IPv4)
+
+	bgpClearConfig(t, dut)
+	dutConf := bgpCreateNbr(&bgpTestParams{localAS: dutAS, peerAS: ateAS}, dut)
+	gnmi.Replace(t, dut, dutConfPath.Config(), dutConf)
+	t.Log("Configure matching Md5 auth password on DUT")
+	gnmi.Replace(t, dut, dutConfPath.Bgp().Neighbor(ateAttrs.IPv4).AuthPassword().Config(), authPassword)
+
+	fptest.LogQuery(t, "DUT BGP Config", dutConfPath.Config(), gnmi.Get(t, dut, dutConfPath.Config()))
+
+	// ATE Configuration.
+	t.Log("Configure port and BGP configs on ATE")
+	ate := ondatra.ATE(t, "ate")
+	topo := configureATE(t, &bgpTestParams{localAS: ateAS, peerIP: dutAttrs.IPv4}, connExternal, md5Auth)
+
+	t.Log("Pushing config to ATE and starting protocols...")
+	otg := ate.OTG()
+	otg.PushConfig(t, topo)
+	otg.StartProtocols(t)
+
+	// Verify Port Status
+	t.Log("Verifying port status")
+	verifyPortsUp(t, dut.Device)
+
+	// Verify BGP status
+	t.Log("Check BGP parameters")
+	verifyBgpTelemetry(t, dut)
+
+	// Verify BGP capabilities
+	t.Log("Check BGP Capabilities")
+	verifyBGPCapabilities(t, dut)
+
+	// Send Cease Notification from ATE to DUT
+	t.Log("Send Cease Notification from OTG to DUT -- ")
+	otg.SetControlAction(t, createCeaseAction(t))
+	t.Log("Verify BGP session state : NOT in ESTABLISHED State")
+	_, ok := gnmi.Watch(t, dut, nbrPath.SessionState().State(), time.Second*60, func(val *ygnmi.Value[oc.E_Bgp_Neighbor_SessionState]) bool {
+		currBgpState, present := val.Val()
+		return present && currBgpState != oc.Bgp_Neighbor_SessionState_ESTABLISHED
+	}).Await(t)
+	if !ok {
+		t.Errorf("BGP neighborship is UP when cease Notification message is recieved")
+	}
+
+	// Verify if Cease notification is received on DUT.
+	t.Log("Verify Error code received on DUT: BgpTypes_BGP_ERROR_CODE_CEASE")
+	_, codeok := gnmi.Watch(t, dut, nbrPath.Messages().Received().LastNotificationErrorCode().State(), 60*time.Second, func(val *ygnmi.Value[oc.E_BgpTypes_BGP_ERROR_CODE]) bool {
+		code, present := val.Val()
+		t.Logf("On disconnect, received code status %v", present)
+		return present && code == oc.BgpTypes_BGP_ERROR_CODE_CEASE
+	}).Await(t)
+	if !codeok {
+		t.Errorf("On disconnect: expected error code %v", oc.BgpTypes_BGP_ERROR_CODE_CEASE)
+	}
+
+	// Clear config on DUT and ATE
+	otg.StopProtocols(t)
+	bgpClearConfig(t, dut)
+}
+
+func TestEstablishAndDisconnect4(t *testing.T) {
+	// DUT configurations.
+	t.Log("Start DUT config load:")
+	dut := ondatra.DUT(t, "dut")
+
+	// Configure interface on the DUT
+	t.Log("Start DUT interface Config")
+	configureDUT(t, dut)
+
+	// Configure Network instance type on DUT
+	t.Log("Configure Network Instance")
+	fptest.ConfigureDefaultNetworkInstance(t, dut)
+
+	t.Log("Configure BGP")
+	dutConfPath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).Protocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP, "BGP")
+	statePath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).Protocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP, "BGP").Bgp()
+	nbrPath := statePath.Neighbor(ateAttrs.IPv4)
+
+	bgpClearConfig(t, dut)
+	dutConf := bgpCreateNbr(&bgpTestParams{localAS: dutAS, peerAS: ateAS}, dut)
+	gnmi.Replace(t, dut, dutConfPath.Config(), dutConf)
+	t.Log("Configure matching Md5 auth password on DUT")
+	gnmi.Replace(t, dut, dutConfPath.Bgp().Neighbor(ateAttrs.IPv4).AuthPassword().Config(), authPassword)
+
+	fptest.LogQuery(t, "DUT BGP Config", dutConfPath.Config(), gnmi.Get(t, dut, dutConfPath.Config()))
+
+	// ATE Configuration.
+	t.Log("Configure port and BGP configs on ATE")
+	ate := ondatra.ATE(t, "ate")
+	topo := configureATE(t, &bgpTestParams{localAS: ateAS, peerIP: dutAttrs.IPv4}, connExternal, md5Auth)
+
+	t.Log("Pushing config to ATE and starting protocols...")
+	otg := ate.OTG()
+	otg.PushConfig(t, topo)
+	otg.StartProtocols(t)
+
+	// Verify Port Status
+	t.Log("Verifying port status")
+	verifyPortsUp(t, dut.Device)
+
+	// Verify BGP status
+	t.Log("Check BGP parameters")
+	verifyBgpTelemetry(t, dut)
+
+	// Verify BGP capabilities
+	t.Log("Check BGP Capabilities")
+	verifyBGPCapabilities(t, dut)
+
+	// Send Cease Notification from ATE to DUT
+	t.Log("Send Cease Notification from OTG to DUT -- ")
+	otg.SetControlAction(t, createCeaseAction(t))
+	t.Log("Verify BGP session state : NOT in ESTABLISHED State")
+	_, ok := gnmi.Watch(t, dut, nbrPath.SessionState().State(), time.Second*60, func(val *ygnmi.Value[oc.E_Bgp_Neighbor_SessionState]) bool {
+		currBgpState, present := val.Val()
+		return present && currBgpState != oc.Bgp_Neighbor_SessionState_ESTABLISHED
+	}).Await(t)
+	if !ok {
+		t.Errorf("BGP neighborship is UP when cease Notification message is recieved")
+	}
+
+	// Verify if Cease notification is received on DUT.
+	t.Log("Verify Error code received on DUT: BgpTypes_BGP_ERROR_CODE_CEASE")
+	_, codeok := gnmi.Watch(t, dut, nbrPath.Messages().Received().LastNotificationErrorCode().State(), 60*time.Second, func(val *ygnmi.Value[oc.E_BgpTypes_BGP_ERROR_CODE]) bool {
+		code, present := val.Val()
+		t.Logf("On disconnect, received code status %v", present)
+		return present && code == oc.BgpTypes_BGP_ERROR_CODE_CEASE
+	}).Await(t)
+	if !codeok {
+		t.Errorf("On disconnect: expected error code %v", oc.BgpTypes_BGP_ERROR_CODE_CEASE)
+	}
+
+	// Clear config on DUT and ATE
+	otg.StopProtocols(t)
+	bgpClearConfig(t, dut)
+}
+
+func TestEstablishAndDisconnect5(t *testing.T) {
+	// DUT configurations.
+	t.Log("Start DUT config load:")
+	dut := ondatra.DUT(t, "dut")
+
+	// Configure interface on the DUT
+	t.Log("Start DUT interface Config")
+	configureDUT(t, dut)
+
+	// Configure Network instance type on DUT
+	t.Log("Configure Network Instance")
+	fptest.ConfigureDefaultNetworkInstance(t, dut)
+
+	t.Log("Configure BGP")
+	dutConfPath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).Protocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP, "BGP")
+	statePath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).Protocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP, "BGP").Bgp()
+	nbrPath := statePath.Neighbor(ateAttrs.IPv4)
+
+	bgpClearConfig(t, dut)
+	dutConf := bgpCreateNbr(&bgpTestParams{localAS: dutAS, peerAS: ateAS}, dut)
+	gnmi.Replace(t, dut, dutConfPath.Config(), dutConf)
+	t.Log("Configure matching Md5 auth password on DUT")
+	gnmi.Replace(t, dut, dutConfPath.Bgp().Neighbor(ateAttrs.IPv4).AuthPassword().Config(), authPassword)
+
+	fptest.LogQuery(t, "DUT BGP Config", dutConfPath.Config(), gnmi.Get(t, dut, dutConfPath.Config()))
+
+	// ATE Configuration.
+	t.Log("Configure port and BGP configs on ATE")
+	ate := ondatra.ATE(t, "ate")
+	topo := configureATE(t, &bgpTestParams{localAS: ateAS, peerIP: dutAttrs.IPv4}, connExternal, md5Auth)
+
+	t.Log("Pushing config to ATE and starting protocols...")
+	otg := ate.OTG()
+	otg.PushConfig(t, topo)
+	otg.StartProtocols(t)
+
+	// Verify Port Status
+	t.Log("Verifying port status")
+	verifyPortsUp(t, dut.Device)
+
+	// Verify BGP status
+	t.Log("Check BGP parameters")
+	verifyBgpTelemetry(t, dut)
+
+	// Verify BGP capabilities
+	t.Log("Check BGP Capabilities")
+	verifyBGPCapabilities(t, dut)
+
+	// Send Cease Notification from ATE to DUT
+	t.Log("Send Cease Notification from OTG to DUT -- ")
+	otg.SetControlAction(t, createCeaseAction(t))
+	t.Log("Verify BGP session state : NOT in ESTABLISHED State")
+	_, ok := gnmi.Watch(t, dut, nbrPath.SessionState().State(), time.Second*60, func(val *ygnmi.Value[oc.E_Bgp_Neighbor_SessionState]) bool {
+		currBgpState, present := val.Val()
+		return present && currBgpState != oc.Bgp_Neighbor_SessionState_ESTABLISHED
+	}).Await(t)
+	if !ok {
+		t.Errorf("BGP neighborship is UP when cease Notification message is recieved")
+	}
+
+	// Verify if Cease notification is received on DUT.
+	t.Log("Verify Error code received on DUT: BgpTypes_BGP_ERROR_CODE_CEASE")
+	_, codeok := gnmi.Watch(t, dut, nbrPath.Messages().Received().LastNotificationErrorCode().State(), 60*time.Second, func(val *ygnmi.Value[oc.E_BgpTypes_BGP_ERROR_CODE]) bool {
+		code, present := val.Val()
+		t.Logf("On disconnect, received code status %v", present)
+		return present && code == oc.BgpTypes_BGP_ERROR_CODE_CEASE
+	}).Await(t)
+	if !codeok {
+		t.Errorf("On disconnect: expected error code %v", oc.BgpTypes_BGP_ERROR_CODE_CEASE)
+	}
+
+	// Clear config on DUT and ATE
+	otg.StopProtocols(t)
+	bgpClearConfig(t, dut)
+}
+
+func TestEstablishAndDisconnect6(t *testing.T) {
+	// DUT configurations.
+	t.Log("Start DUT config load:")
+	dut := ondatra.DUT(t, "dut")
+
+	// Configure interface on the DUT
+	t.Log("Start DUT interface Config")
+	configureDUT(t, dut)
+
+	// Configure Network instance type on DUT
+	t.Log("Configure Network Instance")
+	fptest.ConfigureDefaultNetworkInstance(t, dut)
+
+	t.Log("Configure BGP")
+	dutConfPath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).Protocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP, "BGP")
+	statePath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).Protocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP, "BGP").Bgp()
+	nbrPath := statePath.Neighbor(ateAttrs.IPv4)
+
+	bgpClearConfig(t, dut)
+	dutConf := bgpCreateNbr(&bgpTestParams{localAS: dutAS, peerAS: ateAS}, dut)
+	gnmi.Replace(t, dut, dutConfPath.Config(), dutConf)
+	t.Log("Configure matching Md5 auth password on DUT")
+	gnmi.Replace(t, dut, dutConfPath.Bgp().Neighbor(ateAttrs.IPv4).AuthPassword().Config(), authPassword)
+
+	fptest.LogQuery(t, "DUT BGP Config", dutConfPath.Config(), gnmi.Get(t, dut, dutConfPath.Config()))
+
+	// ATE Configuration.
+	t.Log("Configure port and BGP configs on ATE")
+	ate := ondatra.ATE(t, "ate")
+	topo := configureATE(t, &bgpTestParams{localAS: ateAS, peerIP: dutAttrs.IPv4}, connExternal, md5Auth)
+
+	t.Log("Pushing config to ATE and starting protocols...")
+	otg := ate.OTG()
+	otg.PushConfig(t, topo)
+	otg.StartProtocols(t)
+
+	// Verify Port Status
+	t.Log("Verifying port status")
+	verifyPortsUp(t, dut.Device)
+
+	// Verify BGP status
+	t.Log("Check BGP parameters")
+	verifyBgpTelemetry(t, dut)
+
+	// Verify BGP capabilities
+	t.Log("Check BGP Capabilities")
+	verifyBGPCapabilities(t, dut)
+
+	// Send Cease Notification from ATE to DUT
+	t.Log("Send Cease Notification from OTG to DUT -- ")
+	otg.SetControlAction(t, createCeaseAction(t))
+	t.Log("Verify BGP session state : NOT in ESTABLISHED State")
+	_, ok := gnmi.Watch(t, dut, nbrPath.SessionState().State(), time.Second*60, func(val *ygnmi.Value[oc.E_Bgp_Neighbor_SessionState]) bool {
+		currBgpState, present := val.Val()
+		return present && currBgpState != oc.Bgp_Neighbor_SessionState_ESTABLISHED
+	}).Await(t)
+	if !ok {
+		t.Errorf("BGP neighborship is UP when cease Notification message is recieved")
+	}
+
+	// Verify if Cease notification is received on DUT.
+	t.Log("Verify Error code received on DUT: BgpTypes_BGP_ERROR_CODE_CEASE")
+	_, codeok := gnmi.Watch(t, dut, nbrPath.Messages().Received().LastNotificationErrorCode().State(), 60*time.Second, func(val *ygnmi.Value[oc.E_BgpTypes_BGP_ERROR_CODE]) bool {
+		code, present := val.Val()
+		t.Logf("On disconnect, received code status %v", present)
+		return present && code == oc.BgpTypes_BGP_ERROR_CODE_CEASE
+	}).Await(t)
+	if !codeok {
+		t.Errorf("On disconnect: expected error code %v", oc.BgpTypes_BGP_ERROR_CODE_CEASE)
+	}
+
+	// Clear config on DUT and ATE
+	otg.StopProtocols(t)
+	bgpClearConfig(t, dut)
+}
+
+func TestEstablishAndDisconnect7(t *testing.T) {
+	// DUT configurations.
+	t.Log("Start DUT config load:")
+	dut := ondatra.DUT(t, "dut")
+
+	// Configure interface on the DUT
+	t.Log("Start DUT interface Config")
+	configureDUT(t, dut)
+
+	// Configure Network instance type on DUT
+	t.Log("Configure Network Instance")
+	fptest.ConfigureDefaultNetworkInstance(t, dut)
+
+	t.Log("Configure BGP")
+	dutConfPath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).Protocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP, "BGP")
+	statePath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).Protocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP, "BGP").Bgp()
+	nbrPath := statePath.Neighbor(ateAttrs.IPv4)
+
+	bgpClearConfig(t, dut)
+	dutConf := bgpCreateNbr(&bgpTestParams{localAS: dutAS, peerAS: ateAS}, dut)
+	gnmi.Replace(t, dut, dutConfPath.Config(), dutConf)
+	t.Log("Configure matching Md5 auth password on DUT")
+	gnmi.Replace(t, dut, dutConfPath.Bgp().Neighbor(ateAttrs.IPv4).AuthPassword().Config(), authPassword)
+
+	fptest.LogQuery(t, "DUT BGP Config", dutConfPath.Config(), gnmi.Get(t, dut, dutConfPath.Config()))
+
+	// ATE Configuration.
+	t.Log("Configure port and BGP configs on ATE")
+	ate := ondatra.ATE(t, "ate")
+	topo := configureATE(t, &bgpTestParams{localAS: ateAS, peerIP: dutAttrs.IPv4}, connExternal, md5Auth)
+
+	t.Log("Pushing config to ATE and starting protocols...")
+	otg := ate.OTG()
+	otg.PushConfig(t, topo)
+	otg.StartProtocols(t)
+
+	// Verify Port Status
+	t.Log("Verifying port status")
+	verifyPortsUp(t, dut.Device)
+
+	// Verify BGP status
+	t.Log("Check BGP parameters")
+	verifyBgpTelemetry(t, dut)
+
+	// Verify BGP capabilities
+	t.Log("Check BGP Capabilities")
+	verifyBGPCapabilities(t, dut)
+
+	// Send Cease Notification from ATE to DUT
+	t.Log("Send Cease Notification from OTG to DUT -- ")
+	otg.SetControlAction(t, createCeaseAction(t))
+	t.Log("Verify BGP session state : NOT in ESTABLISHED State")
+	_, ok := gnmi.Watch(t, dut, nbrPath.SessionState().State(), time.Second*60, func(val *ygnmi.Value[oc.E_Bgp_Neighbor_SessionState]) bool {
+		currBgpState, present := val.Val()
+		return present && currBgpState != oc.Bgp_Neighbor_SessionState_ESTABLISHED
+	}).Await(t)
+	if !ok {
+		t.Errorf("BGP neighborship is UP when cease Notification message is recieved")
+	}
+
+	// Verify if Cease notification is received on DUT.
+	t.Log("Verify Error code received on DUT: BgpTypes_BGP_ERROR_CODE_CEASE")
+	_, codeok := gnmi.Watch(t, dut, nbrPath.Messages().Received().LastNotificationErrorCode().State(), 60*time.Second, func(val *ygnmi.Value[oc.E_BgpTypes_BGP_ERROR_CODE]) bool {
+		code, present := val.Val()
+		t.Logf("On disconnect, received code status %v", present)
+		return present && code == oc.BgpTypes_BGP_ERROR_CODE_CEASE
+	}).Await(t)
+	if !codeok {
+		t.Errorf("On disconnect: expected error code %v", oc.BgpTypes_BGP_ERROR_CODE_CEASE)
+	}
+
+	// Clear config on DUT and ATE
+	otg.StopProtocols(t)
+	bgpClearConfig(t, dut)
+}
+
+func TestEstablishAndDisconnect8(t *testing.T) {
+	// DUT configurations.
+	t.Log("Start DUT config load:")
+	dut := ondatra.DUT(t, "dut")
+
+	// Configure interface on the DUT
+	t.Log("Start DUT interface Config")
+	configureDUT(t, dut)
+
+	// Configure Network instance type on DUT
+	t.Log("Configure Network Instance")
+	fptest.ConfigureDefaultNetworkInstance(t, dut)
+
+	t.Log("Configure BGP")
+	dutConfPath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).Protocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP, "BGP")
+	statePath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).Protocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP, "BGP").Bgp()
+	nbrPath := statePath.Neighbor(ateAttrs.IPv4)
+
+	bgpClearConfig(t, dut)
+	dutConf := bgpCreateNbr(&bgpTestParams{localAS: dutAS, peerAS: ateAS}, dut)
+	gnmi.Replace(t, dut, dutConfPath.Config(), dutConf)
+	t.Log("Configure matching Md5 auth password on DUT")
+	gnmi.Replace(t, dut, dutConfPath.Bgp().Neighbor(ateAttrs.IPv4).AuthPassword().Config(), authPassword)
+
+	fptest.LogQuery(t, "DUT BGP Config", dutConfPath.Config(), gnmi.Get(t, dut, dutConfPath.Config()))
+
+	// ATE Configuration.
+	t.Log("Configure port and BGP configs on ATE")
+	ate := ondatra.ATE(t, "ate")
+	topo := configureATE(t, &bgpTestParams{localAS: ateAS, peerIP: dutAttrs.IPv4}, connExternal, md5Auth)
+
+	t.Log("Pushing config to ATE and starting protocols...")
+	otg := ate.OTG()
+	otg.PushConfig(t, topo)
+	otg.StartProtocols(t)
+
+	// Verify Port Status
+	t.Log("Verifying port status")
+	verifyPortsUp(t, dut.Device)
+
+	// Verify BGP status
+	t.Log("Check BGP parameters")
+	verifyBgpTelemetry(t, dut)
+
+	// Verify BGP capabilities
+	t.Log("Check BGP Capabilities")
+	verifyBGPCapabilities(t, dut)
+
+	// Send Cease Notification from ATE to DUT
+	t.Log("Send Cease Notification from OTG to DUT -- ")
+	otg.SetControlAction(t, createCeaseAction(t))
+	t.Log("Verify BGP session state : NOT in ESTABLISHED State")
+	_, ok := gnmi.Watch(t, dut, nbrPath.SessionState().State(), time.Second*60, func(val *ygnmi.Value[oc.E_Bgp_Neighbor_SessionState]) bool {
+		currBgpState, present := val.Val()
+		return present && currBgpState != oc.Bgp_Neighbor_SessionState_ESTABLISHED
+	}).Await(t)
+	if !ok {
+		t.Errorf("BGP neighborship is UP when cease Notification message is recieved")
+	}
+
+	// Verify if Cease notification is received on DUT.
+	t.Log("Verify Error code received on DUT: BgpTypes_BGP_ERROR_CODE_CEASE")
+	_, codeok := gnmi.Watch(t, dut, nbrPath.Messages().Received().LastNotificationErrorCode().State(), 60*time.Second, func(val *ygnmi.Value[oc.E_BgpTypes_BGP_ERROR_CODE]) bool {
+		code, present := val.Val()
+		t.Logf("On disconnect, received code status %v", present)
+		return present && code == oc.BgpTypes_BGP_ERROR_CODE_CEASE
+	}).Await(t)
+	if !codeok {
+		t.Errorf("On disconnect: expected error code %v", oc.BgpTypes_BGP_ERROR_CODE_CEASE)
+	}
+
+	// Clear config on DUT and ATE
+	otg.StopProtocols(t)
+	bgpClearConfig(t, dut)
+}
+
+func TestEstablishAndDisconnect9(t *testing.T) {
+	// DUT configurations.
+	t.Log("Start DUT config load:")
+	dut := ondatra.DUT(t, "dut")
+
+	// Configure interface on the DUT
+	t.Log("Start DUT interface Config")
+	configureDUT(t, dut)
+
+	// Configure Network instance type on DUT
+	t.Log("Configure Network Instance")
+	fptest.ConfigureDefaultNetworkInstance(t, dut)
+
+	t.Log("Configure BGP")
+	dutConfPath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).Protocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP, "BGP")
+	statePath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).Protocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP, "BGP").Bgp()
+	nbrPath := statePath.Neighbor(ateAttrs.IPv4)
+
+	bgpClearConfig(t, dut)
+	dutConf := bgpCreateNbr(&bgpTestParams{localAS: dutAS, peerAS: ateAS}, dut)
+	gnmi.Replace(t, dut, dutConfPath.Config(), dutConf)
+	t.Log("Configure matching Md5 auth password on DUT")
+	gnmi.Replace(t, dut, dutConfPath.Bgp().Neighbor(ateAttrs.IPv4).AuthPassword().Config(), authPassword)
+
+	fptest.LogQuery(t, "DUT BGP Config", dutConfPath.Config(), gnmi.Get(t, dut, dutConfPath.Config()))
+
+	// ATE Configuration.
+	t.Log("Configure port and BGP configs on ATE")
+	ate := ondatra.ATE(t, "ate")
+	topo := configureATE(t, &bgpTestParams{localAS: ateAS, peerIP: dutAttrs.IPv4}, connExternal, md5Auth)
+
+	t.Log("Pushing config to ATE and starting protocols...")
+	otg := ate.OTG()
+	otg.PushConfig(t, topo)
+	otg.StartProtocols(t)
+
+	// Verify Port Status
+	t.Log("Verifying port status")
+	verifyPortsUp(t, dut.Device)
+
+	// Verify BGP status
+	t.Log("Check BGP parameters")
+	verifyBgpTelemetry(t, dut)
+
+	// Verify BGP capabilities
+	t.Log("Check BGP Capabilities")
+	verifyBGPCapabilities(t, dut)
+
+	// Send Cease Notification from ATE to DUT
+	t.Log("Send Cease Notification from OTG to DUT -- ")
+	otg.SetControlAction(t, createCeaseAction(t))
+	t.Log("Verify BGP session state : NOT in ESTABLISHED State")
+	_, ok := gnmi.Watch(t, dut, nbrPath.SessionState().State(), time.Second*60, func(val *ygnmi.Value[oc.E_Bgp_Neighbor_SessionState]) bool {
+		currBgpState, present := val.Val()
+		return present && currBgpState != oc.Bgp_Neighbor_SessionState_ESTABLISHED
+	}).Await(t)
+	if !ok {
+		t.Errorf("BGP neighborship is UP when cease Notification message is recieved")
+	}
+
+	// Verify if Cease notification is received on DUT.
+	t.Log("Verify Error code received on DUT: BgpTypes_BGP_ERROR_CODE_CEASE")
+	_, codeok := gnmi.Watch(t, dut, nbrPath.Messages().Received().LastNotificationErrorCode().State(), 60*time.Second, func(val *ygnmi.Value[oc.E_BgpTypes_BGP_ERROR_CODE]) bool {
+		code, present := val.Val()
+		t.Logf("On disconnect, received code status %v", present)
+		return present && code == oc.BgpTypes_BGP_ERROR_CODE_CEASE
+	}).Await(t)
+	if !codeok {
+		t.Errorf("On disconnect: expected error code %v", oc.BgpTypes_BGP_ERROR_CODE_CEASE)
+	}
+
+	// Clear config on DUT and ATE
+	otg.StopProtocols(t)
+	bgpClearConfig(t, dut)
+}
+
+func TestEstablishAndDisconnect10(t *testing.T) {
+	// DUT configurations.
+	t.Log("Start DUT config load:")
+	dut := ondatra.DUT(t, "dut")
+
+	// Configure interface on the DUT
+	t.Log("Start DUT interface Config")
+	configureDUT(t, dut)
+
+	// Configure Network instance type on DUT
+	t.Log("Configure Network Instance")
+	fptest.ConfigureDefaultNetworkInstance(t, dut)
+
+	t.Log("Configure BGP")
+	dutConfPath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).Protocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP, "BGP")
+	statePath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).Protocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP, "BGP").Bgp()
+	nbrPath := statePath.Neighbor(ateAttrs.IPv4)
+
+	bgpClearConfig(t, dut)
+	dutConf := bgpCreateNbr(&bgpTestParams{localAS: dutAS, peerAS: ateAS}, dut)
+	gnmi.Replace(t, dut, dutConfPath.Config(), dutConf)
+	t.Log("Configure matching Md5 auth password on DUT")
+	gnmi.Replace(t, dut, dutConfPath.Bgp().Neighbor(ateAttrs.IPv4).AuthPassword().Config(), authPassword)
+
+	fptest.LogQuery(t, "DUT BGP Config", dutConfPath.Config(), gnmi.Get(t, dut, dutConfPath.Config()))
+
+	// ATE Configuration.
+	t.Log("Configure port and BGP configs on ATE")
+	ate := ondatra.ATE(t, "ate")
+	topo := configureATE(t, &bgpTestParams{localAS: ateAS, peerIP: dutAttrs.IPv4}, connExternal, md5Auth)
+
+	t.Log("Pushing config to ATE and starting protocols...")
+	otg := ate.OTG()
+	otg.PushConfig(t, topo)
+	otg.StartProtocols(t)
+
+	// Verify Port Status
+	t.Log("Verifying port status")
+	verifyPortsUp(t, dut.Device)
+
+	// Verify BGP status
+	t.Log("Check BGP parameters")
+	verifyBgpTelemetry(t, dut)
+
+	// Verify BGP capabilities
+	t.Log("Check BGP Capabilities")
+	verifyBGPCapabilities(t, dut)
+
+	// Send Cease Notification from ATE to DUT
+	t.Log("Send Cease Notification from OTG to DUT -- ")
+	otg.SetControlAction(t, createCeaseAction(t))
+	t.Log("Verify BGP session state : NOT in ESTABLISHED State")
+	_, ok := gnmi.Watch(t, dut, nbrPath.SessionState().State(), time.Second*60, func(val *ygnmi.Value[oc.E_Bgp_Neighbor_SessionState]) bool {
+		currBgpState, present := val.Val()
+		return present && currBgpState != oc.Bgp_Neighbor_SessionState_ESTABLISHED
+	}).Await(t)
+	if !ok {
+		t.Errorf("BGP neighborship is UP when cease Notification message is recieved")
+	}
+
+	// Verify if Cease notification is received on DUT.
+	t.Log("Verify Error code received on DUT: BgpTypes_BGP_ERROR_CODE_CEASE")
+	_, codeok := gnmi.Watch(t, dut, nbrPath.Messages().Received().LastNotificationErrorCode().State(), 60*time.Second, func(val *ygnmi.Value[oc.E_BgpTypes_BGP_ERROR_CODE]) bool {
+		code, present := val.Val()
+		t.Logf("On disconnect, received code status %v", present)
+		return present && code == oc.BgpTypes_BGP_ERROR_CODE_CEASE
+	}).Await(t)
+	if !codeok {
+		t.Errorf("On disconnect: expected error code %v", oc.BgpTypes_BGP_ERROR_CODE_CEASE)
+	}
+
+	// Clear config on DUT and ATE
+	otg.StopProtocols(t)
+	bgpClearConfig(t, dut)
+}
+
+func TestEstablishAndDisconnect11(t *testing.T) {
+	// DUT configurations.
+	t.Log("Start DUT config load:")
+	dut := ondatra.DUT(t, "dut")
+
+	// Configure interface on the DUT
+	t.Log("Start DUT interface Config")
+	configureDUT(t, dut)
+
+	// Configure Network instance type on DUT
+	t.Log("Configure Network Instance")
+	fptest.ConfigureDefaultNetworkInstance(t, dut)
+
+	t.Log("Configure BGP")
+	dutConfPath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).Protocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP, "BGP")
+	statePath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).Protocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP, "BGP").Bgp()
+	nbrPath := statePath.Neighbor(ateAttrs.IPv4)
+
+	bgpClearConfig(t, dut)
+	dutConf := bgpCreateNbr(&bgpTestParams{localAS: dutAS, peerAS: ateAS}, dut)
+	gnmi.Replace(t, dut, dutConfPath.Config(), dutConf)
+	t.Log("Configure matching Md5 auth password on DUT")
+	gnmi.Replace(t, dut, dutConfPath.Bgp().Neighbor(ateAttrs.IPv4).AuthPassword().Config(), authPassword)
+
+	fptest.LogQuery(t, "DUT BGP Config", dutConfPath.Config(), gnmi.Get(t, dut, dutConfPath.Config()))
+
+	// ATE Configuration.
+	t.Log("Configure port and BGP configs on ATE")
+	ate := ondatra.ATE(t, "ate")
+	topo := configureATE(t, &bgpTestParams{localAS: ateAS, peerIP: dutAttrs.IPv4}, connExternal, md5Auth)
+
+	t.Log("Pushing config to ATE and starting protocols...")
+	otg := ate.OTG()
+	otg.PushConfig(t, topo)
+	otg.StartProtocols(t)
+
+	// Verify Port Status
+	t.Log("Verifying port status")
+	verifyPortsUp(t, dut.Device)
+
+	// Verify BGP status
+	t.Log("Check BGP parameters")
+	verifyBgpTelemetry(t, dut)
+
+	// Verify BGP capabilities
+	t.Log("Check BGP Capabilities")
+	verifyBGPCapabilities(t, dut)
+
+	// Send Cease Notification from ATE to DUT
+	t.Log("Send Cease Notification from OTG to DUT -- ")
+	otg.SetControlAction(t, createCeaseAction(t))
+	t.Log("Verify BGP session state : NOT in ESTABLISHED State")
+	_, ok := gnmi.Watch(t, dut, nbrPath.SessionState().State(), time.Second*60, func(val *ygnmi.Value[oc.E_Bgp_Neighbor_SessionState]) bool {
+		currBgpState, present := val.Val()
+		return present && currBgpState != oc.Bgp_Neighbor_SessionState_ESTABLISHED
+	}).Await(t)
+	if !ok {
+		t.Errorf("BGP neighborship is UP when cease Notification message is recieved")
+	}
+
+	// Verify if Cease notification is received on DUT.
+	t.Log("Verify Error code received on DUT: BgpTypes_BGP_ERROR_CODE_CEASE")
+	_, codeok := gnmi.Watch(t, dut, nbrPath.Messages().Received().LastNotificationErrorCode().State(), 60*time.Second, func(val *ygnmi.Value[oc.E_BgpTypes_BGP_ERROR_CODE]) bool {
+		code, present := val.Val()
+		t.Logf("On disconnect, received code status %v", present)
+		return present && code == oc.BgpTypes_BGP_ERROR_CODE_CEASE
+	}).Await(t)
+	if !codeok {
+		t.Errorf("On disconnect: expected error code %v", oc.BgpTypes_BGP_ERROR_CODE_CEASE)
+	}
+
+	// Clear config on DUT and ATE
+	otg.StopProtocols(t)
+	bgpClearConfig(t, dut)
+}
+
+func TestEstablishAndDisconnect12(t *testing.T) {
+	// DUT configurations.
+	t.Log("Start DUT config load:")
+	dut := ondatra.DUT(t, "dut")
+
+	// Configure interface on the DUT
+	t.Log("Start DUT interface Config")
+	configureDUT(t, dut)
+
+	// Configure Network instance type on DUT
+	t.Log("Configure Network Instance")
+	fptest.ConfigureDefaultNetworkInstance(t, dut)
+
+	t.Log("Configure BGP")
+	dutConfPath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).Protocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP, "BGP")
+	statePath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).Protocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP, "BGP").Bgp()
+	nbrPath := statePath.Neighbor(ateAttrs.IPv4)
+
+	bgpClearConfig(t, dut)
+	dutConf := bgpCreateNbr(&bgpTestParams{localAS: dutAS, peerAS: ateAS}, dut)
+	gnmi.Replace(t, dut, dutConfPath.Config(), dutConf)
+	t.Log("Configure matching Md5 auth password on DUT")
+	gnmi.Replace(t, dut, dutConfPath.Bgp().Neighbor(ateAttrs.IPv4).AuthPassword().Config(), authPassword)
+
+	fptest.LogQuery(t, "DUT BGP Config", dutConfPath.Config(), gnmi.Get(t, dut, dutConfPath.Config()))
+
+	// ATE Configuration.
+	t.Log("Configure port and BGP configs on ATE")
+	ate := ondatra.ATE(t, "ate")
+	topo := configureATE(t, &bgpTestParams{localAS: ateAS, peerIP: dutAttrs.IPv4}, connExternal, md5Auth)
+
+	t.Log("Pushing config to ATE and starting protocols...")
+	otg := ate.OTG()
+	otg.PushConfig(t, topo)
+	otg.StartProtocols(t)
+
+	// Verify Port Status
+	t.Log("Verifying port status")
+	verifyPortsUp(t, dut.Device)
+
+	// Verify BGP status
+	t.Log("Check BGP parameters")
+	verifyBgpTelemetry(t, dut)
+
+	// Verify BGP capabilities
+	t.Log("Check BGP Capabilities")
+	verifyBGPCapabilities(t, dut)
+
+	// Send Cease Notification from ATE to DUT
+	t.Log("Send Cease Notification from OTG to DUT -- ")
+	otg.SetControlAction(t, createCeaseAction(t))
+	t.Log("Verify BGP session state : NOT in ESTABLISHED State")
+	_, ok := gnmi.Watch(t, dut, nbrPath.SessionState().State(), time.Second*60, func(val *ygnmi.Value[oc.E_Bgp_Neighbor_SessionState]) bool {
+		currBgpState, present := val.Val()
+		return present && currBgpState != oc.Bgp_Neighbor_SessionState_ESTABLISHED
+	}).Await(t)
+	if !ok {
+		t.Errorf("BGP neighborship is UP when cease Notification message is recieved")
+	}
+
+	// Verify if Cease notification is received on DUT.
+	t.Log("Verify Error code received on DUT: BgpTypes_BGP_ERROR_CODE_CEASE")
+	_, codeok := gnmi.Watch(t, dut, nbrPath.Messages().Received().LastNotificationErrorCode().State(), 60*time.Second, func(val *ygnmi.Value[oc.E_BgpTypes_BGP_ERROR_CODE]) bool {
+		code, present := val.Val()
+		t.Logf("On disconnect, received code status %v", present)
+		return present && code == oc.BgpTypes_BGP_ERROR_CODE_CEASE
+	}).Await(t)
+	if !codeok {
+		t.Errorf("On disconnect: expected error code %v", oc.BgpTypes_BGP_ERROR_CODE_CEASE)
+	}
+
+	// Clear config on DUT and ATE
+	otg.StopProtocols(t)
+	bgpClearConfig(t, dut)
+}
+
+func TestEstablishAndDisconnect13(t *testing.T) {
+	// DUT configurations.
+	t.Log("Start DUT config load:")
+	dut := ondatra.DUT(t, "dut")
+
+	// Configure interface on the DUT
+	t.Log("Start DUT interface Config")
+	configureDUT(t, dut)
+
+	// Configure Network instance type on DUT
+	t.Log("Configure Network Instance")
+	fptest.ConfigureDefaultNetworkInstance(t, dut)
+
+	t.Log("Configure BGP")
+	dutConfPath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).Protocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP, "BGP")
+	statePath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).Protocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP, "BGP").Bgp()
+	nbrPath := statePath.Neighbor(ateAttrs.IPv4)
+
+	bgpClearConfig(t, dut)
+	dutConf := bgpCreateNbr(&bgpTestParams{localAS: dutAS, peerAS: ateAS}, dut)
+	gnmi.Replace(t, dut, dutConfPath.Config(), dutConf)
+	t.Log("Configure matching Md5 auth password on DUT")
+	gnmi.Replace(t, dut, dutConfPath.Bgp().Neighbor(ateAttrs.IPv4).AuthPassword().Config(), authPassword)
+
+	fptest.LogQuery(t, "DUT BGP Config", dutConfPath.Config(), gnmi.Get(t, dut, dutConfPath.Config()))
+
+	// ATE Configuration.
+	t.Log("Configure port and BGP configs on ATE")
+	ate := ondatra.ATE(t, "ate")
+	topo := configureATE(t, &bgpTestParams{localAS: ateAS, peerIP: dutAttrs.IPv4}, connExternal, md5Auth)
+
+	t.Log("Pushing config to ATE and starting protocols...")
+	otg := ate.OTG()
+	otg.PushConfig(t, topo)
+	otg.StartProtocols(t)
+
+	// Verify Port Status
+	t.Log("Verifying port status")
+	verifyPortsUp(t, dut.Device)
+
+	// Verify BGP status
+	t.Log("Check BGP parameters")
+	verifyBgpTelemetry(t, dut)
+
+	// Verify BGP capabilities
+	t.Log("Check BGP Capabilities")
+	verifyBGPCapabilities(t, dut)
+
+	// Send Cease Notification from ATE to DUT
+	t.Log("Send Cease Notification from OTG to DUT -- ")
+	otg.SetControlAction(t, createCeaseAction(t))
+	t.Log("Verify BGP session state : NOT in ESTABLISHED State")
+	_, ok := gnmi.Watch(t, dut, nbrPath.SessionState().State(), time.Second*60, func(val *ygnmi.Value[oc.E_Bgp_Neighbor_SessionState]) bool {
+		currBgpState, present := val.Val()
+		return present && currBgpState != oc.Bgp_Neighbor_SessionState_ESTABLISHED
+	}).Await(t)
+	if !ok {
+		t.Errorf("BGP neighborship is UP when cease Notification message is recieved")
+	}
+
+	// Verify if Cease notification is received on DUT.
+	t.Log("Verify Error code received on DUT: BgpTypes_BGP_ERROR_CODE_CEASE")
+	_, codeok := gnmi.Watch(t, dut, nbrPath.Messages().Received().LastNotificationErrorCode().State(), 60*time.Second, func(val *ygnmi.Value[oc.E_BgpTypes_BGP_ERROR_CODE]) bool {
+		code, present := val.Val()
+		t.Logf("On disconnect, received code status %v", present)
+		return present && code == oc.BgpTypes_BGP_ERROR_CODE_CEASE
+	}).Await(t)
+	if !codeok {
+		t.Errorf("On disconnect: expected error code %v", oc.BgpTypes_BGP_ERROR_CODE_CEASE)
+	}
+
+	// Clear config on DUT and ATE
+	otg.StopProtocols(t)
+	bgpClearConfig(t, dut)
+}
+
+func TestEstablishAndDisconnect14(t *testing.T) {
+	// DUT configurations.
+	t.Log("Start DUT config load:")
+	dut := ondatra.DUT(t, "dut")
+
+	// Configure interface on the DUT
+	t.Log("Start DUT interface Config")
+	configureDUT(t, dut)
+
+	// Configure Network instance type on DUT
+	t.Log("Configure Network Instance")
+	fptest.ConfigureDefaultNetworkInstance(t, dut)
+
+	t.Log("Configure BGP")
+	dutConfPath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).Protocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP, "BGP")
+	statePath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).Protocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP, "BGP").Bgp()
+	nbrPath := statePath.Neighbor(ateAttrs.IPv4)
+
+	bgpClearConfig(t, dut)
+	dutConf := bgpCreateNbr(&bgpTestParams{localAS: dutAS, peerAS: ateAS}, dut)
+	gnmi.Replace(t, dut, dutConfPath.Config(), dutConf)
+	t.Log("Configure matching Md5 auth password on DUT")
+	gnmi.Replace(t, dut, dutConfPath.Bgp().Neighbor(ateAttrs.IPv4).AuthPassword().Config(), authPassword)
+
+	fptest.LogQuery(t, "DUT BGP Config", dutConfPath.Config(), gnmi.Get(t, dut, dutConfPath.Config()))
+
+	// ATE Configuration.
+	t.Log("Configure port and BGP configs on ATE")
+	ate := ondatra.ATE(t, "ate")
+	topo := configureATE(t, &bgpTestParams{localAS: ateAS, peerIP: dutAttrs.IPv4}, connExternal, md5Auth)
+
+	t.Log("Pushing config to ATE and starting protocols...")
+	otg := ate.OTG()
+	otg.PushConfig(t, topo)
+	otg.StartProtocols(t)
+
+	// Verify Port Status
+	t.Log("Verifying port status")
+	verifyPortsUp(t, dut.Device)
+
+	// Verify BGP status
+	t.Log("Check BGP parameters")
+	verifyBgpTelemetry(t, dut)
+
+	// Verify BGP capabilities
+	t.Log("Check BGP Capabilities")
+	verifyBGPCapabilities(t, dut)
+
+	// Send Cease Notification from ATE to DUT
+	t.Log("Send Cease Notification from OTG to DUT -- ")
+	otg.SetControlAction(t, createCeaseAction(t))
+	t.Log("Verify BGP session state : NOT in ESTABLISHED State")
+	_, ok := gnmi.Watch(t, dut, nbrPath.SessionState().State(), time.Second*60, func(val *ygnmi.Value[oc.E_Bgp_Neighbor_SessionState]) bool {
+		currBgpState, present := val.Val()
+		return present && currBgpState != oc.Bgp_Neighbor_SessionState_ESTABLISHED
+	}).Await(t)
+	if !ok {
+		t.Errorf("BGP neighborship is UP when cease Notification message is recieved")
+	}
+
+	// Verify if Cease notification is received on DUT.
+	t.Log("Verify Error code received on DUT: BgpTypes_BGP_ERROR_CODE_CEASE")
+	_, codeok := gnmi.Watch(t, dut, nbrPath.Messages().Received().LastNotificationErrorCode().State(), 60*time.Second, func(val *ygnmi.Value[oc.E_BgpTypes_BGP_ERROR_CODE]) bool {
+		code, present := val.Val()
+		t.Logf("On disconnect, received code status %v", present)
+		return present && code == oc.BgpTypes_BGP_ERROR_CODE_CEASE
+	}).Await(t)
+	if !codeok {
+		t.Errorf("On disconnect: expected error code %v", oc.BgpTypes_BGP_ERROR_CODE_CEASE)
+	}
+
+	// Clear config on DUT and ATE
+	otg.StopProtocols(t)
+	bgpClearConfig(t, dut)
+}
+
+func TestEstablishAndDisconnect15(t *testing.T) {
+	// DUT configurations.
+	t.Log("Start DUT config load:")
+	dut := ondatra.DUT(t, "dut")
+
+	// Configure interface on the DUT
+	t.Log("Start DUT interface Config")
+	configureDUT(t, dut)
+
+	// Configure Network instance type on DUT
+	t.Log("Configure Network Instance")
+	fptest.ConfigureDefaultNetworkInstance(t, dut)
+
+	t.Log("Configure BGP")
+	dutConfPath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).Protocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP, "BGP")
+	statePath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).Protocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP, "BGP").Bgp()
+	nbrPath := statePath.Neighbor(ateAttrs.IPv4)
+
+	bgpClearConfig(t, dut)
+	dutConf := bgpCreateNbr(&bgpTestParams{localAS: dutAS, peerAS: ateAS}, dut)
+	gnmi.Replace(t, dut, dutConfPath.Config(), dutConf)
+	t.Log("Configure matching Md5 auth password on DUT")
+	gnmi.Replace(t, dut, dutConfPath.Bgp().Neighbor(ateAttrs.IPv4).AuthPassword().Config(), authPassword)
+
+	fptest.LogQuery(t, "DUT BGP Config", dutConfPath.Config(), gnmi.Get(t, dut, dutConfPath.Config()))
+
+	// ATE Configuration.
+	t.Log("Configure port and BGP configs on ATE")
+	ate := ondatra.ATE(t, "ate")
+	topo := configureATE(t, &bgpTestParams{localAS: ateAS, peerIP: dutAttrs.IPv4}, connExternal, md5Auth)
+
+	t.Log("Pushing config to ATE and starting protocols...")
+	otg := ate.OTG()
+	otg.PushConfig(t, topo)
+	otg.StartProtocols(t)
+
+	// Verify Port Status
+	t.Log("Verifying port status")
+	verifyPortsUp(t, dut.Device)
+
+	// Verify BGP status
+	t.Log("Check BGP parameters")
+	verifyBgpTelemetry(t, dut)
+
+	// Verify BGP capabilities
+	t.Log("Check BGP Capabilities")
+	verifyBGPCapabilities(t, dut)
+
+	// Send Cease Notification from ATE to DUT
+	t.Log("Send Cease Notification from OTG to DUT -- ")
+	otg.SetControlAction(t, createCeaseAction(t))
+	t.Log("Verify BGP session state : NOT in ESTABLISHED State")
+	_, ok := gnmi.Watch(t, dut, nbrPath.SessionState().State(), time.Second*60, func(val *ygnmi.Value[oc.E_Bgp_Neighbor_SessionState]) bool {
+		currBgpState, present := val.Val()
+		return present && currBgpState != oc.Bgp_Neighbor_SessionState_ESTABLISHED
+	}).Await(t)
+	if !ok {
+		t.Errorf("BGP neighborship is UP when cease Notification message is recieved")
+	}
+
+	// Verify if Cease notification is received on DUT.
+	t.Log("Verify Error code received on DUT: BgpTypes_BGP_ERROR_CODE_CEASE")
+	_, codeok := gnmi.Watch(t, dut, nbrPath.Messages().Received().LastNotificationErrorCode().State(), 60*time.Second, func(val *ygnmi.Value[oc.E_BgpTypes_BGP_ERROR_CODE]) bool {
+		code, present := val.Val()
+		t.Logf("On disconnect, received code status %v", present)
+		return present && code == oc.BgpTypes_BGP_ERROR_CODE_CEASE
+	}).Await(t)
+	if !codeok {
+		t.Errorf("On disconnect: expected error code %v", oc.BgpTypes_BGP_ERROR_CODE_CEASE)
+	}
+
+	// Clear config on DUT and ATE
+	otg.StopProtocols(t)
+	bgpClearConfig(t, dut)
+}
+
+func TestEstablishAndDisconnect16(t *testing.T) {
+	// DUT configurations.
+	t.Log("Start DUT config load:")
+	dut := ondatra.DUT(t, "dut")
+
+	// Configure interface on the DUT
+	t.Log("Start DUT interface Config")
+	configureDUT(t, dut)
+
+	// Configure Network instance type on DUT
+	t.Log("Configure Network Instance")
+	fptest.ConfigureDefaultNetworkInstance(t, dut)
+
+	t.Log("Configure BGP")
+	dutConfPath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).Protocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP, "BGP")
+	statePath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).Protocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP, "BGP").Bgp()
+	nbrPath := statePath.Neighbor(ateAttrs.IPv4)
+
+	bgpClearConfig(t, dut)
+	dutConf := bgpCreateNbr(&bgpTestParams{localAS: dutAS, peerAS: ateAS}, dut)
+	gnmi.Replace(t, dut, dutConfPath.Config(), dutConf)
+	t.Log("Configure matching Md5 auth password on DUT")
+	gnmi.Replace(t, dut, dutConfPath.Bgp().Neighbor(ateAttrs.IPv4).AuthPassword().Config(), authPassword)
+
+	fptest.LogQuery(t, "DUT BGP Config", dutConfPath.Config(), gnmi.Get(t, dut, dutConfPath.Config()))
+
+	// ATE Configuration.
+	t.Log("Configure port and BGP configs on ATE")
+	ate := ondatra.ATE(t, "ate")
+	topo := configureATE(t, &bgpTestParams{localAS: ateAS, peerIP: dutAttrs.IPv4}, connExternal, md5Auth)
+
+	t.Log("Pushing config to ATE and starting protocols...")
+	otg := ate.OTG()
+	otg.PushConfig(t, topo)
+	otg.StartProtocols(t)
+
+	// Verify Port Status
+	t.Log("Verifying port status")
+	verifyPortsUp(t, dut.Device)
+
+	// Verify BGP status
+	t.Log("Check BGP parameters")
+	verifyBgpTelemetry(t, dut)
+
+	// Verify BGP capabilities
+	t.Log("Check BGP Capabilities")
+	verifyBGPCapabilities(t, dut)
+
+	// Send Cease Notification from ATE to DUT
+	t.Log("Send Cease Notification from OTG to DUT -- ")
+	otg.SetControlAction(t, createCeaseAction(t))
+	t.Log("Verify BGP session state : NOT in ESTABLISHED State")
+	_, ok := gnmi.Watch(t, dut, nbrPath.SessionState().State(), time.Second*60, func(val *ygnmi.Value[oc.E_Bgp_Neighbor_SessionState]) bool {
+		currBgpState, present := val.Val()
+		return present && currBgpState != oc.Bgp_Neighbor_SessionState_ESTABLISHED
+	}).Await(t)
+	if !ok {
+		t.Errorf("BGP neighborship is UP when cease Notification message is recieved")
+	}
+
+	// Verify if Cease notification is received on DUT.
+	t.Log("Verify Error code received on DUT: BgpTypes_BGP_ERROR_CODE_CEASE")
+	_, codeok := gnmi.Watch(t, dut, nbrPath.Messages().Received().LastNotificationErrorCode().State(), 60*time.Second, func(val *ygnmi.Value[oc.E_BgpTypes_BGP_ERROR_CODE]) bool {
+		code, present := val.Val()
+		t.Logf("On disconnect, received code status %v", present)
+		return present && code == oc.BgpTypes_BGP_ERROR_CODE_CEASE
+	}).Await(t)
+	if !codeok {
+		t.Errorf("On disconnect: expected error code %v", oc.BgpTypes_BGP_ERROR_CODE_CEASE)
+	}
+
+	// Clear config on DUT and ATE
+	otg.StopProtocols(t)
+	bgpClearConfig(t, dut)
+}
+
+func TestEstablishAndDisconnect17(t *testing.T) {
+	// DUT configurations.
+	t.Log("Start DUT config load:")
+	dut := ondatra.DUT(t, "dut")
+
+	// Configure interface on the DUT
+	t.Log("Start DUT interface Config")
+	configureDUT(t, dut)
+
+	// Configure Network instance type on DUT
+	t.Log("Configure Network Instance")
+	fptest.ConfigureDefaultNetworkInstance(t, dut)
+
+	t.Log("Configure BGP")
+	dutConfPath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).Protocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP, "BGP")
+	statePath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).Protocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP, "BGP").Bgp()
+	nbrPath := statePath.Neighbor(ateAttrs.IPv4)
+
+	bgpClearConfig(t, dut)
+	dutConf := bgpCreateNbr(&bgpTestParams{localAS: dutAS, peerAS: ateAS}, dut)
+	gnmi.Replace(t, dut, dutConfPath.Config(), dutConf)
+	t.Log("Configure matching Md5 auth password on DUT")
+	gnmi.Replace(t, dut, dutConfPath.Bgp().Neighbor(ateAttrs.IPv4).AuthPassword().Config(), authPassword)
+
+	fptest.LogQuery(t, "DUT BGP Config", dutConfPath.Config(), gnmi.Get(t, dut, dutConfPath.Config()))
+
+	// ATE Configuration.
+	t.Log("Configure port and BGP configs on ATE")
+	ate := ondatra.ATE(t, "ate")
+	topo := configureATE(t, &bgpTestParams{localAS: ateAS, peerIP: dutAttrs.IPv4}, connExternal, md5Auth)
+
+	t.Log("Pushing config to ATE and starting protocols...")
+	otg := ate.OTG()
+	otg.PushConfig(t, topo)
+	otg.StartProtocols(t)
+
+	// Verify Port Status
+	t.Log("Verifying port status")
+	verifyPortsUp(t, dut.Device)
+
+	// Verify BGP status
+	t.Log("Check BGP parameters")
+	verifyBgpTelemetry(t, dut)
+
+	// Verify BGP capabilities
+	t.Log("Check BGP Capabilities")
+	verifyBGPCapabilities(t, dut)
+
+	// Send Cease Notification from ATE to DUT
+	t.Log("Send Cease Notification from OTG to DUT -- ")
+	otg.SetControlAction(t, createCeaseAction(t))
+	t.Log("Verify BGP session state : NOT in ESTABLISHED State")
+	_, ok := gnmi.Watch(t, dut, nbrPath.SessionState().State(), time.Second*60, func(val *ygnmi.Value[oc.E_Bgp_Neighbor_SessionState]) bool {
+		currBgpState, present := val.Val()
+		return present && currBgpState != oc.Bgp_Neighbor_SessionState_ESTABLISHED
+	}).Await(t)
+	if !ok {
+		t.Errorf("BGP neighborship is UP when cease Notification message is recieved")
+	}
+
+	// Verify if Cease notification is received on DUT.
+	t.Log("Verify Error code received on DUT: BgpTypes_BGP_ERROR_CODE_CEASE")
+	_, codeok := gnmi.Watch(t, dut, nbrPath.Messages().Received().LastNotificationErrorCode().State(), 60*time.Second, func(val *ygnmi.Value[oc.E_BgpTypes_BGP_ERROR_CODE]) bool {
+		code, present := val.Val()
+		t.Logf("On disconnect, received code status %v", present)
+		return present && code == oc.BgpTypes_BGP_ERROR_CODE_CEASE
+	}).Await(t)
+	if !codeok {
+		t.Errorf("On disconnect: expected error code %v", oc.BgpTypes_BGP_ERROR_CODE_CEASE)
+	}
+
+	// Clear config on DUT and ATE
+	otg.StopProtocols(t)
+	bgpClearConfig(t, dut)
+}
+
+func TestEstablishAndDisconnect18(t *testing.T) {
+	// DUT configurations.
+	t.Log("Start DUT config load:")
+	dut := ondatra.DUT(t, "dut")
+
+	// Configure interface on the DUT
+	t.Log("Start DUT interface Config")
+	configureDUT(t, dut)
+
+	// Configure Network instance type on DUT
+	t.Log("Configure Network Instance")
+	fptest.ConfigureDefaultNetworkInstance(t, dut)
+
+	t.Log("Configure BGP")
+	dutConfPath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).Protocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP, "BGP")
+	statePath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).Protocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP, "BGP").Bgp()
+	nbrPath := statePath.Neighbor(ateAttrs.IPv4)
+
+	bgpClearConfig(t, dut)
+	dutConf := bgpCreateNbr(&bgpTestParams{localAS: dutAS, peerAS: ateAS}, dut)
+	gnmi.Replace(t, dut, dutConfPath.Config(), dutConf)
+	t.Log("Configure matching Md5 auth password on DUT")
+	gnmi.Replace(t, dut, dutConfPath.Bgp().Neighbor(ateAttrs.IPv4).AuthPassword().Config(), authPassword)
+
+	fptest.LogQuery(t, "DUT BGP Config", dutConfPath.Config(), gnmi.Get(t, dut, dutConfPath.Config()))
+
+	// ATE Configuration.
+	t.Log("Configure port and BGP configs on ATE")
+	ate := ondatra.ATE(t, "ate")
+	topo := configureATE(t, &bgpTestParams{localAS: ateAS, peerIP: dutAttrs.IPv4}, connExternal, md5Auth)
+
+	t.Log("Pushing config to ATE and starting protocols...")
+	otg := ate.OTG()
+	otg.PushConfig(t, topo)
+	otg.StartProtocols(t)
+
+	// Verify Port Status
+	t.Log("Verifying port status")
+	verifyPortsUp(t, dut.Device)
+
+	// Verify BGP status
+	t.Log("Check BGP parameters")
+	verifyBgpTelemetry(t, dut)
+
+	// Verify BGP capabilities
+	t.Log("Check BGP Capabilities")
+	verifyBGPCapabilities(t, dut)
+
+	// Send Cease Notification from ATE to DUT
+	t.Log("Send Cease Notification from OTG to DUT -- ")
+	otg.SetControlAction(t, createCeaseAction(t))
+	t.Log("Verify BGP session state : NOT in ESTABLISHED State")
+	_, ok := gnmi.Watch(t, dut, nbrPath.SessionState().State(), time.Second*60, func(val *ygnmi.Value[oc.E_Bgp_Neighbor_SessionState]) bool {
+		currBgpState, present := val.Val()
+		return present && currBgpState != oc.Bgp_Neighbor_SessionState_ESTABLISHED
+	}).Await(t)
+	if !ok {
+		t.Errorf("BGP neighborship is UP when cease Notification message is recieved")
+	}
+
+	// Verify if Cease notification is received on DUT.
+	t.Log("Verify Error code received on DUT: BgpTypes_BGP_ERROR_CODE_CEASE")
+	_, codeok := gnmi.Watch(t, dut, nbrPath.Messages().Received().LastNotificationErrorCode().State(), 60*time.Second, func(val *ygnmi.Value[oc.E_BgpTypes_BGP_ERROR_CODE]) bool {
+		code, present := val.Val()
+		t.Logf("On disconnect, received code status %v", present)
+		return present && code == oc.BgpTypes_BGP_ERROR_CODE_CEASE
+	}).Await(t)
+	if !codeok {
+		t.Errorf("On disconnect: expected error code %v", oc.BgpTypes_BGP_ERROR_CODE_CEASE)
+	}
+
+	// Clear config on DUT and ATE
+	otg.StopProtocols(t)
+	bgpClearConfig(t, dut)
+}
+
+func TestEstablishAndDisconnect19(t *testing.T) {
+	// DUT configurations.
+	t.Log("Start DUT config load:")
+	dut := ondatra.DUT(t, "dut")
+
+	// Configure interface on the DUT
+	t.Log("Start DUT interface Config")
+	configureDUT(t, dut)
+
+	// Configure Network instance type on DUT
+	t.Log("Configure Network Instance")
+	fptest.ConfigureDefaultNetworkInstance(t, dut)
+
+	t.Log("Configure BGP")
+	dutConfPath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).Protocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP, "BGP")
+	statePath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).Protocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP, "BGP").Bgp()
+	nbrPath := statePath.Neighbor(ateAttrs.IPv4)
+
+	bgpClearConfig(t, dut)
+	dutConf := bgpCreateNbr(&bgpTestParams{localAS: dutAS, peerAS: ateAS}, dut)
+	gnmi.Replace(t, dut, dutConfPath.Config(), dutConf)
+	t.Log("Configure matching Md5 auth password on DUT")
+	gnmi.Replace(t, dut, dutConfPath.Bgp().Neighbor(ateAttrs.IPv4).AuthPassword().Config(), authPassword)
+
+	fptest.LogQuery(t, "DUT BGP Config", dutConfPath.Config(), gnmi.Get(t, dut, dutConfPath.Config()))
+
+	// ATE Configuration.
+	t.Log("Configure port and BGP configs on ATE")
+	ate := ondatra.ATE(t, "ate")
+	topo := configureATE(t, &bgpTestParams{localAS: ateAS, peerIP: dutAttrs.IPv4}, connExternal, md5Auth)
+
+	t.Log("Pushing config to ATE and starting protocols...")
+	otg := ate.OTG()
+	otg.PushConfig(t, topo)
+	otg.StartProtocols(t)
+
+	// Verify Port Status
+	t.Log("Verifying port status")
+	verifyPortsUp(t, dut.Device)
+
+	// Verify BGP status
+	t.Log("Check BGP parameters")
+	verifyBgpTelemetry(t, dut)
+
+	// Verify BGP capabilities
+	t.Log("Check BGP Capabilities")
+	verifyBGPCapabilities(t, dut)
+
+	// Send Cease Notification from ATE to DUT
+	t.Log("Send Cease Notification from OTG to DUT -- ")
+	otg.SetControlAction(t, createCeaseAction(t))
+	t.Log("Verify BGP session state : NOT in ESTABLISHED State")
+	_, ok := gnmi.Watch(t, dut, nbrPath.SessionState().State(), time.Second*60, func(val *ygnmi.Value[oc.E_Bgp_Neighbor_SessionState]) bool {
+		currBgpState, present := val.Val()
+		return present && currBgpState != oc.Bgp_Neighbor_SessionState_ESTABLISHED
+	}).Await(t)
+	if !ok {
+		t.Errorf("BGP neighborship is UP when cease Notification message is recieved")
+	}
+
+	// Verify if Cease notification is received on DUT.
+	t.Log("Verify Error code received on DUT: BgpTypes_BGP_ERROR_CODE_CEASE")
+	_, codeok := gnmi.Watch(t, dut, nbrPath.Messages().Received().LastNotificationErrorCode().State(), 60*time.Second, func(val *ygnmi.Value[oc.E_BgpTypes_BGP_ERROR_CODE]) bool {
+		code, present := val.Val()
+		t.Logf("On disconnect, received code status %v", present)
+		return present && code == oc.BgpTypes_BGP_ERROR_CODE_CEASE
+	}).Await(t)
+	if !codeok {
+		t.Errorf("On disconnect: expected error code %v", oc.BgpTypes_BGP_ERROR_CODE_CEASE)
+	}
+
+	// Clear config on DUT and ATE
+	otg.StopProtocols(t)
+	bgpClearConfig(t, dut)
+}
+
+func TestEstablishAndDisconnect20(t *testing.T) {
+	// DUT configurations.
+	t.Log("Start DUT config load:")
+	dut := ondatra.DUT(t, "dut")
+
+	// Configure interface on the DUT
+	t.Log("Start DUT interface Config")
+	configureDUT(t, dut)
+
+	// Configure Network instance type on DUT
+	t.Log("Configure Network Instance")
+	fptest.ConfigureDefaultNetworkInstance(t, dut)
+
+	t.Log("Configure BGP")
+	dutConfPath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).Protocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP, "BGP")
+	statePath := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(dut)).Protocol(oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP, "BGP").Bgp()
+	nbrPath := statePath.Neighbor(ateAttrs.IPv4)
+
+	bgpClearConfig(t, dut)
+	dutConf := bgpCreateNbr(&bgpTestParams{localAS: dutAS, peerAS: ateAS}, dut)
+	gnmi.Replace(t, dut, dutConfPath.Config(), dutConf)
+	t.Log("Configure matching Md5 auth password on DUT")
+	gnmi.Replace(t, dut, dutConfPath.Bgp().Neighbor(ateAttrs.IPv4).AuthPassword().Config(), authPassword)
+
+	fptest.LogQuery(t, "DUT BGP Config", dutConfPath.Config(), gnmi.Get(t, dut, dutConfPath.Config()))
+
+	// ATE Configuration.
+	t.Log("Configure port and BGP configs on ATE")
+	ate := ondatra.ATE(t, "ate")
+	topo := configureATE(t, &bgpTestParams{localAS: ateAS, peerIP: dutAttrs.IPv4}, connExternal, md5Auth)
+
+	t.Log("Pushing config to ATE and starting protocols...")
+	otg := ate.OTG()
+	otg.PushConfig(t, topo)
+	otg.StartProtocols(t)
+
+	// Verify Port Status
+	t.Log("Verifying port status")
+	verifyPortsUp(t, dut.Device)
+
+	// Verify BGP status
+	t.Log("Check BGP parameters")
+	verifyBgpTelemetry(t, dut)
+
+	// Verify BGP capabilities
+	t.Log("Check BGP Capabilities")
+	verifyBGPCapabilities(t, dut)
+
+	// Send Cease Notification from ATE to DUT
+	t.Log("Send Cease Notification from OTG to DUT -- ")
+	otg.SetControlAction(t, createCeaseAction(t))
+	t.Log("Verify BGP session state : NOT in ESTABLISHED State")
+	_, ok := gnmi.Watch(t, dut, nbrPath.SessionState().State(), time.Second*60, func(val *ygnmi.Value[oc.E_Bgp_Neighbor_SessionState]) bool {
+		currBgpState, present := val.Val()
+		return present && currBgpState != oc.Bgp_Neighbor_SessionState_ESTABLISHED
+	}).Await(t)
+	if !ok {
+		t.Errorf("BGP neighborship is UP when cease Notification message is recieved")
+	}
+
+	// Verify if Cease notification is received on DUT.
+	t.Log("Verify Error code received on DUT: BgpTypes_BGP_ERROR_CODE_CEASE")
+	_, codeok := gnmi.Watch(t, dut, nbrPath.Messages().Received().LastNotificationErrorCode().State(), 60*time.Second, func(val *ygnmi.Value[oc.E_BgpTypes_BGP_ERROR_CODE]) bool {
+		code, present := val.Val()
+		t.Logf("On disconnect, received code status %v", present)
+		return present && code == oc.BgpTypes_BGP_ERROR_CODE_CEASE
+	}).Await(t)
+	if !codeok {
+		t.Errorf("On disconnect: expected error code %v", oc.BgpTypes_BGP_ERROR_CODE_CEASE)
+	}
+
+	// Clear config on DUT and ATE
+	otg.StopProtocols(t)
+	bgpClearConfig(t, dut)
+}
+
+/*
 // TestPassword is to verify md5 authentication password on DUT.
 // Verification is done through BGP adjacency implicitly.
 func TestPassword(t *testing.T) {
@@ -526,3 +1971,5 @@ func TestParameters(t *testing.T) {
 		})
 	}
 }
+
+*/
