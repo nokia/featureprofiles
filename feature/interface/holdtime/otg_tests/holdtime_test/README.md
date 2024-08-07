@@ -49,21 +49,30 @@ Verify oper-state behaviour
   * oper-status last change time has NOT changed
 *   Stop sending Ethernet Remote Fault (RF) from OTG port-1 
 
-## Config Parameter Coverage
 
-*   /interfaces/interface/hold-time/config/up
-*   /interfaces/interface/hold-time/config/down
 
-## Telemetry Parameter Coverage
+## OpenConfig Path and RPC Coverage
 
-*   /interfaces/interface/hold-time/config/up
-*   /interfaces/interface/hold-time/config/down
-*   /interfaces/interface/state/oper-status
-*   /interfaces/interface/state/last-change
+The below yaml defines the OC paths intended to be covered by this test.  OC paths used for test setup are not listed here.
 
-## Protocol/RPC Parameter Coverage
-
-None
+```yaml
+paths:
+  ## Config Paths ##
+   /interfaces/interface/hold-time/config/up:
+   /interfaces/interface/hold-time/config/down:
+ 
+  ## State Paths ##
+    /interfaces/interface/hold-time/config/up:
+    /interfaces/interface/hold-time/config/down:
+    /interfaces/interface/state/oper-status:
+    /interfaces/interface/state/last-change:
+    
+rpcs:
+  gnmi:
+    gNMI.Get:
+    gNMI.Subscribe:
+    gNMI.Set:
+```
 
 ## Minimum DUT Platform Requirement
 

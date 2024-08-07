@@ -246,14 +246,14 @@ func flapOTGInterface(t *testing.T,
 		ate.OTG().SetControlState(t, portStateAction)
 	} else if actionState == "DOWN" {
 		// TC2 Step 2 Bring Down OTG Interface
-		t.Log("RT-5.5.2: Bring Down OTG Interface")
+		t.Log("Step2. RT-5.5.2: Bring Down OTG Interface")
 		portStateAction.Port().Link().SetPortNames([]string{p1.ID()}).SetState(gosnappi.StatePortLinkState.DOWN)
-		otgStateChangeTsStr = gnmi.Get(t, dut, gnmi.OC().System().CurrentDatetime().State())
 		ate.OTG().SetControlState(t, portStateAction)
+		otgStateChangeTsStr = gnmi.Get(t, dut, gnmi.OC().System().CurrentDatetime().State())
 
 		// TC2 Step 3
-		t.Log("Step 3 sleeping 500ms")
-		time.Sleep(500 * time.Millisecond)
+		t.Log("Step 3 sleeping 1000ms")
+		time.Sleep(1000 * time.Millisecond)
 	}
 
 	// Step 4. Read timestamp of last oper-status change  form DUT port-1 (DUT_LAST_CHANGE_TS)
@@ -270,9 +270,9 @@ func flapOTGInterface(t *testing.T,
 
 	// Step 5. verify oper-status is DOWN
 	if DutLastChangeOper2 != expectedStatus {
-		t.Errorf("Interface %s status got %v, want %v", aggID, DutLastChangeTS2STR, expectedStatus.String())
+		t.Errorf("Interface %s status got %v, want %v", aggID, DutLastChangeOper2, expectedStatus.String())
 	} else {
-		t.Logf("Interface %s status got %v, want %v", aggID, DutLastChangeTS2STR, expectedStatus.String())
+		t.Logf("Interface %s status got %v, want %v", aggID, DutLastChangeOper2, expectedStatus.String())
 	}
 
 	// convert string type change to time.time
@@ -375,12 +375,13 @@ func TestHoldTimeConfig(t *testing.T) {
 }
 
 func TestTC1ValidateTimersConfig(t *testing.T) {
+
 	dut := ondatra.DUT(t, "dut")
 
 	holdTimePath := gnmi.OC().Interface(dutPort1Intf.Name()).HoldTime().State()
 
 	holdTimeState := gnmi.Get(t, dut, holdTimePath)
-	t.Log(holdTimeState)
+	t.Logf("Holdtime status Up:%v & Down:%v", holdTimeState.Up, holdTimeState.Down)
 	if *holdTimeState.Up == upTimer && *holdTimeState.Down == downTimer {
 		t.Logf("Successfully configured times as up timer is %d and down timer"+
 			" is %d", *holdTimeState.Up, *holdTimeState.Down)
@@ -389,15 +390,18 @@ func TestTC1ValidateTimersConfig(t *testing.T) {
 			"expected up %d got %d expected down %d got %d", upTimer, *holdTimeState.Up,
 			downTimer, *holdTimeState.Down)
 	}
+	gnmi.Await(t, dut, gnmi.OC().Interface(aggID).OperStatus().State(), time.Minute, oc.Interface_OperStatus_UP)
 }
 
 func TestTC2LongDown(t *testing.T) {
+
 	dut := ondatra.DUT(t, "dut")
 	ate := ondatra.ATE(t, "ate")
 
 	var otgStateChangeTs, DutLastChangeTS2 time.Time
 	var expectedOper, actualOper string
 
+	verifyPortsStatus(t, dut, "UP", 10)
 	t.Run(fmt.Sprintf("Shut down OTG interface to cause remote fault on %s", aggID), func(t *testing.T) {
 		otgStateChangeTs, DutLastChangeTS2, expectedOper, actualOper = flapOTGInterface(t, ate, dut, "DOWN")
 		if expectedOper != actualOper {
@@ -409,7 +413,7 @@ func TestTC2LongDown(t *testing.T) {
 	durationInMS := duration.Milliseconds()
 
 	// Define the expected delay and tolerance
-	expectedDelayMS := 300 // Expected delay in milliseconds
+	expectedDelayMS := downTimer // Expected delay in milliseconds
 	minDuration := int64(expectedDelayMS - toleranceMS)
 	maxDuration := int64(expectedDelayMS + toleranceMS)
 
@@ -421,7 +425,9 @@ func TestTC2LongDown(t *testing.T) {
 		t.Logf("Last change reported at: %v", DutLastChangeTS2)
 		t.Logf("Duration between shutdown triggered and last change reported: %v ms", durationInMS)
 
-		if pass {
+		if durationInMS == 0 || durationInMS < 0 {
+			t.Fatalf("FAIL: Interface couldnt shut within 1000mSec, got %d ms", durationInMS)
+		} else if pass {
 			t.Logf("PASS: Duration is within the expected range; got %d ms", durationInMS)
 		} else {
 			t.Errorf("FAIL: Expected duration to be within %d ms to %d ms; got %d ms", minDuration, maxDuration, durationInMS)
@@ -451,13 +457,16 @@ func TestTC3ShortUP(t *testing.T) {
 
 		// shutting down OTG interface to emulate the RF
 		OTGInterfaceDOWN(t, ate, dut)
+		verifyPortsStatus(t, dut, "DOWN", 6)
 		oper1 := gnmi.Get(t, dut, gnmi.OC().Interface(aggID).OperStatus().State())
 		change1 := gnmi.Get(t, dut, gnmi.OC().Interface(aggID).LastChange().State())
-		t.Log(oper1)
-		t.Log(change1)
+		t.Logf("Current operation state of %v is %v", aggID, oper1)
+		t.Logf("Last operation state change of %v is %v & at time %v", aggID, oper1, time.Unix(0, int64(change1)).UTC())
 
 		// bring port back up for 4 seconds below the 5000 ms hold up timer
 		OTGInterfaceUP(t, ate)
+		t.Log("Sleeping for 4000mSec less than hold-up:5000mS timer")
+		time.Sleep(4 * time.Second)
 		// shut the OTG interface back to down state
 		OTGInterfaceDOWN(t, ate, dut)
 		oper2 := gnmi.Get(t, dut, gnmi.OC().Interface(aggID).OperStatus().State())
@@ -497,7 +506,7 @@ func TestTC4SLongUP(t *testing.T) {
 		OTGInterfaceDOWN(t, ate, dut)
 		time.Sleep(1 * time.Second)
 		change1 := gnmi.Get(t, dut, gnmi.OC().Interface(aggID).LastChange().State())
-		t.Log(change1)
+		t.Logf("Last operation state change of %v is at %v", aggID, time.Unix(0, int64(change1)).UTC().Format(time.RFC3339Nano))
 
 		// bring port back up for 4 seconds below the 5000 ms hold up timer
 		OTGInterfaceUP(t, ate)
@@ -554,7 +563,7 @@ func TestTC5ShortDOWN(t *testing.T) {
 		// shutting down OTG interface to emulate the RF
 		t.Log("Shutdown OTG Interface")
 		change1 = gnmi.Get(t, dut, gnmi.OC().Interface(aggID).State())
-		t.Logf("change1 last change is %v and status is %v", change1.LastChange, change1.AdminStatus)
+		t.Logf("Last operation state change of %v is %v at time %v", aggID, change1.AdminStatus, time.Unix(0, int64(*change1.LastChange)).UTC().Format(time.RFC3339Nano))
 
 		time1 = OTGInterfaceDOWN(t, ate, dut)
 		time.Sleep(200 * time.Millisecond)
