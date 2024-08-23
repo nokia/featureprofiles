@@ -16,6 +16,7 @@ package admin_distance_test
 
 import (
 	"math"
+	"strconv"
 	"testing"
 	"time"
 
@@ -30,6 +31,7 @@ import (
 	"github.com/openconfig/ondatra/gnmi"
 	"github.com/openconfig/ondatra/gnmi/oc"
 	"github.com/openconfig/ondatra/otg"
+	"github.com/openconfig/ygnmi/ygnmi"
 	"github.com/openconfig/ygot/ygot"
 )
 
@@ -102,34 +104,39 @@ func TestAdminDistance(t *testing.T) {
 	})
 
 	testCases := []struct {
-		desc string
-		rd   uint8
-		port string
-		bgp  string
+		desc   string
+		rd     uint8
+		port   string
+		bgp    string
+		origin oc.E_PolicyTypes_INSTALL_PROTOCOL_TYPE
 	}{
 		{
-			desc: "EBGP RD value 5",
-			rd:   5,
-			port: "port2",
-			bgp:  "eBGP",
+			desc:   "EBGP RD value 5",
+			rd:     5,
+			port:   "port2",
+			bgp:    "eBGP",
+			origin: oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP,
 		},
 		{
-			desc: "EBGP RD value 250",
-			rd:   250,
-			port: "port1",
-			bgp:  "eBGP",
+			desc:   "EBGP RD value 250",
+			rd:     250,
+			port:   "port1",
+			bgp:    "eBGP",
+			origin: oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_ISIS,
 		},
 		{
-			desc: "IBGP RD value 5",
-			rd:   5,
-			port: "port2",
-			bgp:  "iBGP",
+			desc:   "IBGP RD value 5",
+			rd:     5,
+			port:   "port2",
+			bgp:    "iBGP",
+			origin: oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_BGP,
 		},
 		{
-			desc: "IBGP RD value 250",
-			rd:   250,
-			port: "port1",
-			bgp:  "iBGP",
+			desc:   "IBGP RD value 250",
+			rd:     250,
+			port:   "port1",
+			bgp:    "iBGP",
+			origin: oc.PolicyTypes_INSTALL_PROTOCOL_TYPE_ISIS,
 		},
 	}
 
@@ -153,6 +160,22 @@ func TestAdminDistance(t *testing.T) {
 				ts.ATE.OTG().StartProtocols(t)
 				otgutils.WaitForARP(t, ts.ATE.OTG(), ts.ATETop, "IPv4")
 				otgutils.WaitForARP(t, ts.ATE.OTG(), ts.ATETop, "IPv6")
+
+				ipv4Path := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(ts.DUT)).Afts().Ipv4Entry(v4Network + "/" + strconv.FormatUint(uint64(prefixV4Len), 10))
+				if got, ok := gnmi.Watch(t, ts.DUT, ipv4Path.State(), time.Minute, func(val *ygnmi.Value[*oc.NetworkInstance_Afts_Ipv4Entry]) bool {
+					ipv4Entry, present := val.Val()
+					return present && ipv4Entry.GetOriginProtocol() == tc.origin
+				}).Await(t); !ok {
+					t.Errorf("ipv4-entry/state/prefix got %v, want %s", got, tc.origin)
+				}
+
+				ipv6Path := gnmi.OC().NetworkInstance(deviations.DefaultNetworkInstance(ts.DUT)).Afts().Ipv6Entry(v6Network + "/" + strconv.FormatUint(uint64(prefixV6Len), 10))
+				if got, ok := gnmi.Watch(t, ts.DUT, ipv6Path.State(), time.Minute, func(val *ygnmi.Value[*oc.NetworkInstance_Afts_Ipv6Entry]) bool {
+					ipv6Entry, present := val.Val()
+					return present && ipv6Entry.GetOriginProtocol() == tc.origin
+				}).Await(t); !ok {
+					t.Errorf("ipv6-entry/state/prefix got %v, want %s", got, tc.origin)
+				}
 
 				ts.ATE.OTG().StartTraffic(t)
 				// added 30 seconds for sleep for traffic flow
