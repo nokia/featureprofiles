@@ -1,0 +1,8 @@
+# proto-file: github.com/openconfig/featureprofiles/proto/metadata.proto
+# proto-message: Metadata
+
+uuid:  "d7072af7-49f5-4498-a702-06cd15b43cf4"
+plan_id:  "attestz3"
+description:  "General enrollz and attestz tests"
+testbed:  TESTBED_DUT
+
