@@ -1,0 +1,7 @@
+# proto-file: github.com/openconfig/featureprofiles/proto/metadata.proto
+# proto-message: Metadata
+
+uuid: "751e6837-00c5-4830-b4fc-0b41ee96de87"
+plan_id: "ACCTZ-9.1"
+description: "Accounting Privilege Escalation"
+testbed: TESTBED_DUT

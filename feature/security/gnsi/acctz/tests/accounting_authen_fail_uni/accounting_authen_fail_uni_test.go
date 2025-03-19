@@ -1,4 +1,4 @@
-// Copyright 2024 Google LLC
+// Copyright 2025 Google LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,27 +12,38 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package recordsubscribenongrpc_test
+package accountingauthenfailuni
 
 import (
 	"context"
 	"encoding/json"
-	"testing"
-	"time"
-
 	"github.com/google/go-cmp/cmp"
-	"google.golang.org/protobuf/testing/protocmp"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
 	"github.com/openconfig/featureprofiles/internal/fptest"
 	"github.com/openconfig/featureprofiles/internal/security/acctz"
+	"github.com/openconfig/featureprofiles/internal/security/credz"
 	acctzpb "github.com/openconfig/gnsi/acctz"
 	"github.com/openconfig/ondatra"
+	"google.golang.org/protobuf/testing/protocmp"
+	"google.golang.org/protobuf/types/known/timestamppb"
+	"testing"
+	"time"
+)
+
+const (
+	username      = "testuser"
+	wrongUsername = "wronguser"
+	wrongPassword = "wrongpassword"
 )
 
 type recordRequestResult struct {
 	record *acctzpb.RecordResponse
 	err    error
+}
+
+type testCase struct {
+	username    string
+	password    string
+	serviceType acctzpb.GrpcService_GrpcServiceType
 }
 
 func TestMain(m *testing.M) {
@@ -44,22 +55,52 @@ func prettyPrint(i any) string {
 	return string(s)
 }
 
-func TestAccountzRecordSubscribeNonGRPC(t *testing.T) {
+func TestAccountzAuthenFailUni(t *testing.T) {
 	dut := ondatra.DUT(t, "dut")
-	acctz.SetupUsers(t, dut, true)
 	var records []*acctzpb.RecordResponse
+
+	// Setup user and password.
+	credz.SetupUser(t, dut, username)
+	password := credz.GeneratePassword()
+	credz.RotateUserPassword(t, dut, username, password, "v1.0", uint64(time.Now().Unix()))
+
+	testCases := []testCase{
+		{
+			username:    "",
+			password:    password,
+			serviceType: acctzpb.GrpcService_GRPC_SERVICE_TYPE_GNMI,
+		},
+		{
+			username:    wrongUsername,
+			password:    password,
+			serviceType: acctzpb.GrpcService_GRPC_SERVICE_TYPE_GNOI,
+		},
+		{
+			username:    username,
+			password:    "",
+			serviceType: acctzpb.GrpcService_GRPC_SERVICE_TYPE_GNSI,
+		},
+		{
+			username:    username,
+			password:    wrongPassword,
+			serviceType: acctzpb.GrpcService_GRPC_SERVICE_TYPE_GRIBI,
+		},
+		{
+			username:    "",
+			password:    password,
+			serviceType: acctzpb.GrpcService_GRPC_SERVICE_TYPE_P4RT,
+		},
+	}
 
 	// Put enough time between the test starting and any prior events so we can easily know where
 	// our records start.
 	time.Sleep(5 * time.Second)
 
 	startTime := time.Now()
-	newRecords := acctz.SendSuccessCliCommand(t, dut)
-	records = append(records, newRecords...)
-	newRecords = acctz.SendFailCliCommand(t, dut)
-	records = append(records, newRecords...)
-	newRecords = acctz.SendShellCommand(t, dut)
-	records = append(records, newRecords...)
+	for _, tc := range testCases {
+		record := acctz.SendFailRPC(t, dut, tc.username, tc.password, tc.serviceType)
+		records = append(records, record)
+	}
 
 	// Quick sleep to ensure all the records have been processed/ready for us.
 	time.Sleep(5 * time.Second)
@@ -76,16 +117,16 @@ func TestAccountzRecordSubscribeNonGRPC(t *testing.T) {
 	}
 	defer acctzSubClient.CloseSend()
 
-	var recordIdx int
-	var lastTimestampUnixMillis int64
 	r := make(chan recordRequestResult)
+	var recordIdx int
 
 	// Ignore proto fields which are set internally by the DUT (cannot be matched exactly)
 	// and compare them manually later.
 	popts := []cmp.Option{protocmp.Transform(),
 		protocmp.IgnoreFields(&acctzpb.RecordResponse{}, "timestamp", "task_ids"),
 		protocmp.IgnoreFields(&acctzpb.AuthzDetail{}, "detail"),
-		protocmp.IgnoreFields(&acctzpb.SessionInfo{}, "channel_id", "tty"),
+		protocmp.IgnoreFields(&acctzpb.SessionInfo{}, "channel_id"),
+		protocmp.IgnoreFields(&acctzpb.AuthnDetail{}, "cause"),
 	}
 
 	for {
@@ -130,25 +171,13 @@ func TestAccountzRecordSubscribeNonGRPC(t *testing.T) {
 			continue
 		}
 
-		// Skip start/stop accounting records if present.
-		sessionStatus := resp.record.GetSessionInfo().GetStatus()
-		if sessionStatus == acctzpb.SessionInfo_SESSION_STATUS_LOGIN || sessionStatus == acctzpb.SessionInfo_SESSION_STATUS_LOGOUT {
-			continue
-		}
-
-		timestamp := resp.record.Timestamp.AsTime()
-		if timestamp.UnixMilli() == lastTimestampUnixMillis {
-			// This ensures that timestamps are actually changing for each record.
-			t.Errorf("Timestamp is the same as the previous timestamp, this shouldn't be possible!, Record Details: %s", prettyPrint(resp.record))
-		}
-		lastTimestampUnixMillis = timestamp.UnixMilli()
-
 		// Verify acctz proto bits.
 		if diff := cmp.Diff(resp.record, records[recordIdx], popts...); diff != "" {
-			t.Errorf("got diff in got/want: %s", diff)
+			t.Errorf("got diff in -got,+want: %s", diff)
 		}
 
 		// Verify record timestamp is after request timestamp.
+		timestamp := resp.record.Timestamp.AsTime()
 		if !timestamp.After(requestTimestamp.AsTime()) {
 			t.Errorf("Record timestamp is before record request timestamp %v, Record Details: %v", requestTimestamp.AsTime(), prettyPrint(resp.record))
 		}
@@ -162,15 +191,9 @@ func TestAccountzRecordSubscribeNonGRPC(t *testing.T) {
 			t.Errorf("Channel Id is not populated for record: %v", prettyPrint(resp.record))
 		}
 
-		// Tty only set for ssh records.
-		if resp.record.GetSessionInfo().GetTty() == "" {
-			t.Errorf("Should have tty allocated but not set, Record Details: %s", prettyPrint(resp.record))
-		}
-
-		// Verify authz detail is populated for denied cmds.
-		authzInfo := resp.record.GetCmdService().GetAuthz()
-		if authzInfo.Status == acctzpb.AuthzDetail_AUTHZ_STATUS_DENY && authzInfo.GetDetail() == "" {
-			t.Errorf("Authorization detail is not populated for record: %v", prettyPrint(resp.record))
+		// Verify authn cause is not empty
+		if resp.record.GetSessionInfo().GetAuthn().GetCause() == "" {
+			t.Errorf("Authn Cause is not populated for record: %v", prettyPrint(resp.record))
 		}
 
 		t.Logf("Processed Record: %s", prettyPrint(resp.record))

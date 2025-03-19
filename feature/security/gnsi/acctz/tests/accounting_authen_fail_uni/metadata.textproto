@@ -1,0 +1,7 @@
+# proto-file: github.com/openconfig/featureprofiles/proto/metadata.proto
+# proto-message: Metadata
+
+uuid: "908534a9-8533-41d5-93ef-6c8d2328716f"
+plan_id: "ACCTZ-8.1"
+description: "Accounting Authentication Failure - Uni-transaction"
+testbed: TESTBED_DUT

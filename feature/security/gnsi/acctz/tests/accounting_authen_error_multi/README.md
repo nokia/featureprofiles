@@ -1,4 +1,4 @@
-# ACCTZ-10.1 - gNSI.acctz.v1 (Accounting) Test Accounting Authentication Error - Multi-transaction
+# ACCTZ-10.1: Accounting Authentication Error - Multi-transaction
 
 ## Summary
 Test Accounting for authentication errors in the authentication service

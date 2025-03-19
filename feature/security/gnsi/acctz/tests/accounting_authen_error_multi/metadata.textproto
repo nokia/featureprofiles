@@ -1,0 +1,7 @@
+# proto-file: github.com/openconfig/featureprofiles/proto/metadata.proto
+# proto-message: Metadata
+
+uuid: "bae28b0e-ca66-45cb-bdd7-8e0c2c452b50"
+plan_id: "ACCTZ-10.1"
+description: "Accounting Authentication Error - Multi-transaction"
+testbed: TESTBED_DUT

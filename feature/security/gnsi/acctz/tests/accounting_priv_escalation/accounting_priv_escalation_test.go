@@ -1,4 +1,4 @@
-// Copyright 2024 Google LLC
+// Copyright 2025 Google LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,22 +12,26 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package recordsubscribenongrpc_test
+package accountingprivescalation
 
 import (
 	"context"
 	"encoding/json"
-	"testing"
-	"time"
-
 	"github.com/google/go-cmp/cmp"
-	"google.golang.org/protobuf/testing/protocmp"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
 	"github.com/openconfig/featureprofiles/internal/fptest"
 	"github.com/openconfig/featureprofiles/internal/security/acctz"
 	acctzpb "github.com/openconfig/gnsi/acctz"
 	"github.com/openconfig/ondatra"
+	"google.golang.org/protobuf/testing/protocmp"
+	"google.golang.org/protobuf/types/known/timestamppb"
+	"testing"
+	"time"
+)
+
+const (
+	testServerGroup = "fp-tacacs"
+	username        = "testuser"
+	wrongPassword   = "wrongpassword"
 )
 
 type recordRequestResult struct {
@@ -44,9 +48,9 @@ func prettyPrint(i any) string {
 	return string(s)
 }
 
-func TestAccountzRecordSubscribeNonGRPC(t *testing.T) {
+func TestAccountzPrivEscalation(t *testing.T) {
 	dut := ondatra.DUT(t, "dut")
-	acctz.SetupUsers(t, dut, true)
+	acctz.SetupUsers(t, dut, false)
 	var records []*acctzpb.RecordResponse
 
 	// Put enough time between the test starting and any prior events so we can easily know where
@@ -54,12 +58,8 @@ func TestAccountzRecordSubscribeNonGRPC(t *testing.T) {
 	time.Sleep(5 * time.Second)
 
 	startTime := time.Now()
-	newRecords := acctz.SendSuccessCliCommand(t, dut)
-	records = append(records, newRecords...)
-	newRecords = acctz.SendFailCliCommand(t, dut)
-	records = append(records, newRecords...)
-	newRecords = acctz.SendShellCommand(t, dut)
-	records = append(records, newRecords...)
+	record := acctz.SendEnableShellCommand(t, dut)
+	records = append(records, record)
 
 	// Quick sleep to ensure all the records have been processed/ready for us.
 	time.Sleep(5 * time.Second)
@@ -76,9 +76,8 @@ func TestAccountzRecordSubscribeNonGRPC(t *testing.T) {
 	}
 	defer acctzSubClient.CloseSend()
 
-	var recordIdx int
-	var lastTimestampUnixMillis int64
 	r := make(chan recordRequestResult)
+	var recordIdx int
 
 	// Ignore proto fields which are set internally by the DUT (cannot be matched exactly)
 	// and compare them manually later.
@@ -86,6 +85,7 @@ func TestAccountzRecordSubscribeNonGRPC(t *testing.T) {
 		protocmp.IgnoreFields(&acctzpb.RecordResponse{}, "timestamp", "task_ids"),
 		protocmp.IgnoreFields(&acctzpb.AuthzDetail{}, "detail"),
 		protocmp.IgnoreFields(&acctzpb.SessionInfo{}, "channel_id", "tty"),
+		protocmp.IgnoreFields(&acctzpb.AuthnDetail{}, "cause"),
 	}
 
 	for {
@@ -136,19 +136,13 @@ func TestAccountzRecordSubscribeNonGRPC(t *testing.T) {
 			continue
 		}
 
-		timestamp := resp.record.Timestamp.AsTime()
-		if timestamp.UnixMilli() == lastTimestampUnixMillis {
-			// This ensures that timestamps are actually changing for each record.
-			t.Errorf("Timestamp is the same as the previous timestamp, this shouldn't be possible!, Record Details: %s", prettyPrint(resp.record))
-		}
-		lastTimestampUnixMillis = timestamp.UnixMilli()
-
 		// Verify acctz proto bits.
 		if diff := cmp.Diff(resp.record, records[recordIdx], popts...); diff != "" {
-			t.Errorf("got diff in got/want: %s", diff)
+			t.Errorf("got diff in -got,+want: %s", diff)
 		}
 
 		// Verify record timestamp is after request timestamp.
+		timestamp := resp.record.Timestamp.AsTime()
 		if !timestamp.After(requestTimestamp.AsTime()) {
 			t.Errorf("Record timestamp is before record request timestamp %v, Record Details: %v", requestTimestamp.AsTime(), prettyPrint(resp.record))
 		}
@@ -165,12 +159,6 @@ func TestAccountzRecordSubscribeNonGRPC(t *testing.T) {
 		// Tty only set for ssh records.
 		if resp.record.GetSessionInfo().GetTty() == "" {
 			t.Errorf("Should have tty allocated but not set, Record Details: %s", prettyPrint(resp.record))
-		}
-
-		// Verify authz detail is populated for denied cmds.
-		authzInfo := resp.record.GetCmdService().GetAuthz()
-		if authzInfo.Status == acctzpb.AuthzDetail_AUTHZ_STATUS_DENY && authzInfo.GetDetail() == "" {
-			t.Errorf("Authorization detail is not populated for record: %v", prettyPrint(resp.record))
 		}
 
 		t.Logf("Processed Record: %s", prettyPrint(resp.record))
