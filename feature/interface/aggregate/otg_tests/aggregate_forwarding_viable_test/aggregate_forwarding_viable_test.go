@@ -588,12 +588,14 @@ func (tc *testArgs) getCounters(t *testing.T, when string) []*oc.Interface_Count
 	fmt.Fprint(w, "Raw Interface Counters\n\n")
 	fmt.Fprint(w, "Name\tInUnicastPkts\tInOctets\tOutUnicastPkts\tOutOctets\n")
 	for _, port := range tc.dutPorts[1:] {
-		counters := gnmi.Get(t, tc.dut, gnmi.OC().Interface(port.Name()).Counters().State())
-		results = append(results, counters)
-		fmt.Fprintf(w, "%s\t%d\t%d\t%d\t%d\n",
-			port.Name(),
-			counters.GetInUnicastPkts(), counters.GetInOctets(),
-			counters.GetOutUnicastPkts(), counters.GetOutOctets())
+		counters, present := gnmi.Lookup(t, tc.dut, gnmi.OC().Interface(port.Name()).Counters().State()).Val()
+		if present {
+			results = append(results, counters)
+			fmt.Fprintf(w, "%s\t%d\t%d\t%d\t%d\n",
+				port.Name(),
+				counters.GetInUnicastPkts(), counters.GetInOctets(),
+				counters.GetOutUnicastPkts(), counters.GetOutOctets())
+		}
 	}
 	w.Flush()
 	t.Log(b)
