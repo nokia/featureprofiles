@@ -158,6 +158,12 @@ func configureDUT(t *testing.T, dut *ondatra.DUTDevice) {
 	i2 := dutPort2.NewOCInterface(p2, dut)
 	gnmi.Replace(t, dut, d.Interface(p2).Config(), i2)
 	fptest.ConfigureDefaultNetworkInstance(t, dut)
+
+	if deviations.ExplicitInterfaceInDefaultVRF(dut) {
+		fptest.AssignToNetworkInstance(t, dut, p1, deviations.DefaultNetworkInstance(dut), 0)
+		fptest.AssignToNetworkInstance(t, dut, p2, deviations.DefaultNetworkInstance(dut), 0)
+	}
+
 }
 
 func configureDUTTrafficPolicy(t *testing.T, dut *ondatra.DUTDevice, portName string) {
