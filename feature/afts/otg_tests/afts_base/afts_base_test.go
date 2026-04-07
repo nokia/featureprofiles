@@ -253,7 +253,10 @@ func createBGPNeighbor(peerGrpNameV4, peerGrpNameV6 string, nbrs []*BGPNeighbor,
 	peerGroupV6AfiSafi := peerGroupV6.GetOrCreateAfiSafi(oc.BgpTypes_AFI_SAFI_TYPE_IPV6_UNICAST)
 	peerGroupV6AfiSafi.SetEnabled(true)
 
-	if deviations.MultipathUnsupportedNeighborOrAfisafi(dut) {
+	if deviations.EnableMultipathUnderAfiSafi(dut) {
+		afiSAFI.GetOrCreateUseMultiplePaths().GetOrCreateEbgp().SetMaximumPaths(2)
+		asisafi6.GetOrCreateUseMultiplePaths().GetOrCreateEbgp().SetMaximumPaths(2)
+	} else if deviations.MultipathUnsupportedNeighborOrAfisafi(dut) {
 		peerGroupV4.GetOrCreateUseMultiplePaths().SetEnabled(true)
 		peerGroupV6.GetOrCreateUseMultiplePaths().SetEnabled(true)
 	} else {

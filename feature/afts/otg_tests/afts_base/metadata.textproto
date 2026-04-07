@@ -39,3 +39,15 @@ platform_exceptions: {
     interface_ref_interface_id_format: true
   }
 }
+platform_exceptions: {
+  platform: {
+    vendor: NOKIA
+  }
+  deviations: {
+    interface_enabled: true
+    enable_multipath_under_afi_safi: true
+    explicit_interface_in_default_vrf: true
+    low_scale_aft: true
+    missing_value_for_defaults: true
+  }
+}
