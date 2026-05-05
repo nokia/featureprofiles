@@ -19,7 +19,7 @@ import (
 	"flag"
 	"fmt"
 	"sort"
-	"strings"
+	"strconv"
 	"testing"
 	"time"
 
@@ -858,7 +858,7 @@ func configureOTG(t testing.TB, otg *otg.OTG, atePorts []*ondatra.Port) gosnappi
 	t.Logf("configureOTG")
 	config := gosnappi.NewConfig()
 	pmd100GFRPorts := []string{}
-	for _, ap := range atePorts {
+	for i, ap := range atePorts {
 		if ap.PMD() == ondatra.PMD100GBASEFR {
 			pmd100GFRPorts = append(pmd100GFRPorts, ap.ID())
 		}
@@ -868,7 +868,7 @@ func configureOTG(t testing.TB, otg *otg.OTG, atePorts []*ondatra.Port) gosnappi
 
 		port := config.Ports().Add().SetName(ap.ID())
 		atePortNamelist = append(atePortNamelist, port.Name())
-		portName := fmt.Sprintf("ate%s", strings.ToUpper(string(ap.ID()[0]))+string(ap.ID()[1:]))
+		portName := fmt.Sprintf("atePort%s", strconv.Itoa(i+1))
 		dev := config.Devices().Add().SetName(portName)
 		macAddress := portsMap[portName].MAC
 		eth := dev.Ethernets().Add().SetName(portName + ".Eth").SetMac(macAddress)
@@ -881,7 +881,7 @@ func configureOTG(t testing.TB, otg *otg.OTG, atePorts []*ondatra.Port) gosnappi
 			SetPrefix(plenIPv6)
 
 		otgPortDevices = append(otgPortDevices, dev)
-		if ap.ID() == "port8" {
+		if i == 7 {
 			iDut8LoopV4 := dev.Ipv4Loopbacks().Add().SetName("Port8LoopV4").SetEthName(eth.Name())
 			iDut8LoopV4.SetAddress(otgIsisPort8LoopV4)
 			iDut8LoopV6 := dev.Ipv6Loopbacks().Add().SetName("Port8LoopV6").SetEthName(eth.Name())
@@ -1287,10 +1287,4 @@ func TestTraceRoute(t *testing.T) {
 		testTunnelTrafficDecapEncap(ctx, t, dut, args)
 	})
 
-	defer func() {
-		// Flush all entries after test.
-		if err := gribi.FlushAll(client); err != nil {
-			t.Error(err)
-		}
-	}()
 }
