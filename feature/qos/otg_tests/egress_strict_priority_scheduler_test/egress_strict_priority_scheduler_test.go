@@ -49,10 +49,7 @@ var (
 	ateRxP3 = attrs.Attributes{Name: "ate3", MAC: "00:01:01:01:01:03", IPv4: "198.51.100.10", IPv4Len: 30, IPv6: "2001:db8::a", IPv6Len: 126}
 
 	mplsLabel uint32  = 1001
-	tolerance float32 = 5.0,
-
-	// Max time to wait for OTG flow transmit telemetry to go false after StopTraffic.
-	trafficTransmitSettleTimeout = 30 * time.Second
+	tolerance float32 = 5.0
 )
 
 func TestMain(m *testing.M) {
@@ -293,7 +290,7 @@ func verifyEgressStrictPrioritySchedulerTrafficIPv4(t *testing.T, dut *ondatra.D
 		ate.OTG().StopTraffic(t)
 
 		for flowName := range trafficFlows {
-			waitForTraffic(t, ate.OTG(), flowName, trafficTransmitSettleTimeout)
+			waitForTraffic(t, ate.OTG(), flowName, 10)
 		}
 
 		t.Logf("Printing aggregated flow metrics from OTG: \n")
@@ -2133,15 +2130,13 @@ func configureMplsExpClassifierCLI(t *testing.T, dut *ondatra.DUTDevice, classif
 }
 
 func waitForTraffic(t *testing.T, otg *otg.OTG, flowName string, timeout time.Duration) {
-	t.Helper()
-	transmitPath := gnmi.OTG().Flow(flowName).Transmit().State()
-	checkStopped := func(val *ygnmi.Value[bool]) bool {
+	_, ok := gnmi.Watch(t, otg, transmitPath, timeout, func(val *ygnmi.Value[bool]) bool {
 		transmitState, present := val.Val()
 		return present && !transmitState
+	}).Await(t)
+
+	if !ok {
+		t.Errorf("Traffic for flow %s did not stop within the timeout of %d", flowName, timeout)
+	} else {
+		t.Logf("Traffic for flow %s has stopped", flowName)
 	}
-	if _, ok := gnmi.Watch(t, otg, transmitPath, timeout, checkStopped).Await(t); !ok {
-		t.Errorf("Traffic for flow %s did not stop within the timeout of %v", flowName, timeout)
-		return
-	}
-	t.Logf("Traffic for flow %s has stopped", flowName)
-}
