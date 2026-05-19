@@ -290,7 +290,7 @@ func verifyEgressStrictPrioritySchedulerTrafficIPv4(t *testing.T, dut *ondatra.D
 		ate.OTG().StopTraffic(t)
 
 		for flowName := range trafficFlows {
-			waitForTraffic(t, ate.OTG(), flowName, 10)
+			waitForTraffic(t, ate.OTG(), flowName, 10 * time.Second)
 		}
 
 		t.Logf("Printing aggregated flow metrics from OTG: \n")
