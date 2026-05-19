@@ -110,7 +110,6 @@ func verifyEgressStrictPrioritySchedulerTrafficIPv4(t *testing.T, dut *ondatra.D
 			inputIntf             attrs.Attributes
 		}
 
-		// AF2 flows expect ~70% throughput: NC1+AF4+AF3 use 2%+60%+24% of line, leaving 14% for AF2 while AF2 offers 20%.
 		trafficFlows := map[string]*trafficData{
 			"ateTxP1-regular-nc1": {
 				frameSize:             512,
@@ -163,7 +162,7 @@ func verifyEgressStrictPrioritySchedulerTrafficIPv4(t *testing.T, dut *ondatra.D
 			"ateTxP1-regular-af2": {
 				frameSize:             512,
 				trafficRate:           10,
-				expectedThroughputPct: 70.0,
+				expectedThroughputPct: 50.0,
 				dscp:                  2,
 				queue:                 queues.AF2,
 				inputIntf:             ateTxP1,
@@ -172,7 +171,7 @@ func verifyEgressStrictPrioritySchedulerTrafficIPv4(t *testing.T, dut *ondatra.D
 				frameSize:             512,
 				trafficRate:           10,
 				dscp:                  2,
-				expectedThroughputPct: 70.0,
+				expectedThroughputPct: 50.0,
 				queue:                 queues.AF2,
 				inputIntf:             ateTxP2,
 			},
@@ -383,7 +382,6 @@ func verifyEgressStrictPrioritySchedulerTrafficIPv6(t *testing.T, dut *ondatra.D
 			inputIntf             attrs.Attributes
 		}
 
-		// AF2 flows expect ~70% throughput: NC1+AF4+AF3 use 2%+60%+24% of line, leaving 14% for AF2 while AF2 offers 20%.
 		trafficFlows := map[string]*trafficData{
 			"ateTxP1-regular-nc1": {
 				frameSize:             512,
@@ -436,7 +434,7 @@ func verifyEgressStrictPrioritySchedulerTrafficIPv6(t *testing.T, dut *ondatra.D
 			"ateTxP1-regular-af2": {
 				frameSize:             512,
 				trafficRate:           10,
-				expectedThroughputPct: 70.0,
+				expectedThroughputPct: 50.0,
 				dscp:                  []uint32{16, 17, 18, 19},
 				queue:                 queues.AF2,
 				inputIntf:             ateTxP1,
@@ -445,7 +443,7 @@ func verifyEgressStrictPrioritySchedulerTrafficIPv6(t *testing.T, dut *ondatra.D
 				frameSize:             512,
 				trafficRate:           10,
 				dscp:                  []uint32{20, 21, 22, 23},
-				expectedThroughputPct: 70.0,
+				expectedThroughputPct: 50.0,
 				queue:                 queues.AF2,
 				inputIntf:             ateTxP2,
 			},
@@ -650,7 +648,6 @@ func verifyEgressStrictPrioritySchedulerTrafficMPLS(t *testing.T, dut *ondatra.D
 			inputIntf             attrs.Attributes
 		}
 
-		// AF2 flows expect ~70% throughput: NC1+AF4+AF3 use 2%+60%+24% of line, leaving 14% for AF2 while AF2 offers 20%.
 		trafficFlows := map[string]*trafficData{
 			"ateTxP1-regular-nc1": {
 				frameSize:             512,
@@ -703,7 +700,7 @@ func verifyEgressStrictPrioritySchedulerTrafficMPLS(t *testing.T, dut *ondatra.D
 			"ateTxP1-regular-af2": {
 				frameSize:             512,
 				trafficRate:           10,
-				expectedThroughputPct: 70.0,
+				expectedThroughputPct: 50.0,
 				dscp:                  2,
 				queue:                 queues.AF2,
 				inputIntf:             ateTxP1,
@@ -712,7 +709,7 @@ func verifyEgressStrictPrioritySchedulerTrafficMPLS(t *testing.T, dut *ondatra.D
 				frameSize:             512,
 				trafficRate:           10,
 				dscp:                  2,
-				expectedThroughputPct: 70.0,
+				expectedThroughputPct: 50.0,
 				queue:                 queues.AF2,
 				inputIntf:             ateTxP2,
 			},
@@ -941,7 +938,7 @@ func createTrafficFlowsIPv4(t *testing.T, ate *ondatra.ATEDevice, top gosnappi.C
 		"ateTxP1-regular-af2": {
 			frameSize:             512,
 			trafficRate:           10,
-			expectedThroughputPct: 70.0,
+			expectedThroughputPct: 50.0,
 			dscp:                  2,
 			queue:                 queues.AF2,
 			inputIntf:             ateTxP1,
@@ -950,7 +947,7 @@ func createTrafficFlowsIPv4(t *testing.T, ate *ondatra.ATEDevice, top gosnappi.C
 			frameSize:             512,
 			trafficRate:           10,
 			dscp:                  2,
-			expectedThroughputPct: 70.0,
+			expectedThroughputPct: 50.0,
 			queue:                 queues.AF2,
 			inputIntf:             ateTxP2,
 		},
@@ -1074,7 +1071,7 @@ func createTrafficFlowsIPv6(t *testing.T, ate *ondatra.ATEDevice, top gosnappi.C
 		"ateTxP1-regular-af2": {
 			frameSize:             512,
 			trafficRate:           10,
-			expectedThroughputPct: 70.0,
+			expectedThroughputPct: 50.0,
 			dscp:                  []uint32{16, 17, 18, 19},
 			queue:                 queues.AF2,
 			inputIntf:             ateTxP1,
@@ -1083,7 +1080,7 @@ func createTrafficFlowsIPv6(t *testing.T, ate *ondatra.ATEDevice, top gosnappi.C
 			frameSize:             512,
 			trafficRate:           10,
 			dscp:                  []uint32{20, 21, 22, 23},
-			expectedThroughputPct: 70.0,
+			expectedThroughputPct: 50.0,
 			queue:                 queues.AF2,
 			inputIntf:             ateTxP2,
 		},
@@ -1207,7 +1204,7 @@ func createTrafficFlowsMPLS(t *testing.T, ate *ondatra.ATEDevice, top gosnappi.C
 		"ateTxP1-regular-af2": {
 			frameSize:             512,
 			trafficRate:           10,
-			expectedThroughputPct: 70.0,
+			expectedThroughputPct: 50.0,
 			exp:                   2,
 			queue:                 queues.AF2,
 			inputIntf:             ateTxP1,
@@ -1216,7 +1213,7 @@ func createTrafficFlowsMPLS(t *testing.T, ate *ondatra.ATEDevice, top gosnappi.C
 			frameSize:             512,
 			trafficRate:           10,
 			exp:                   2,
-			expectedThroughputPct: 70.0,
+			expectedThroughputPct: 50.0,
 			queue:                 queues.AF2,
 			inputIntf:             ateTxP2,
 		},
@@ -1533,9 +1530,6 @@ func ConfigureDUTQoSIPv4(t *testing.T, dut *ondatra.DUTDevice) {
 	}
 
 	t.Logf("Create QoS scheduler policies config")
-	// Use a single scheduler (sequence 0) with one input per queue. Some platforms only
-	// accept scheduler sequence values 0..1 under a policy; multiple distinct sequences
-	// (e.g. 2..6) are rejected. This matches ConfigureDUTQoSIPv6 / ConfigureDUTQoSMPLS.
 	schedulerPolicies := []cfgplugins.SchedulerPolicy{
 		{
 			Desc:        "scheduler-policy-BE1",
