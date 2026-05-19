@@ -2130,6 +2130,7 @@ func configureMplsExpClassifierCLI(t *testing.T, dut *ondatra.DUTDevice, classif
 }
 
 func waitForTraffic(t *testing.T, otg *otg.OTG, flowName string, timeout time.Duration) {
+	transmitPath := gnmi.OTG().Flow(flowName).Transmit().State()
 	_, ok := gnmi.Watch(t, otg, transmitPath, timeout, func(val *ygnmi.Value[bool]) bool {
 		transmitState, present := val.Val()
 		return present && !transmitState
@@ -2140,3 +2141,4 @@ func waitForTraffic(t *testing.T, otg *otg.OTG, flowName string, timeout time.Du
 	} else {
 		t.Logf("Traffic for flow %s has stopped", flowName)
 	}
+}
