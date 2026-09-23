@@ -516,6 +516,7 @@ func configureDeviceID(t *testing.T, dut *ondatra.DUTDevice) {
 	if !ok {
 		t.Fatal("Couldn't find P4RT Node for port: port1")
 	}
+	p4rtutils.EnsureNokiaParentLinecardsConfigured(t, dut, []string{p4rtNode})
 	t.Logf("Configuring P4RT Node: %s", p4rtNode)
 	c := oc.Component{}
 	c.Name = ygot.String(p4rtNode)

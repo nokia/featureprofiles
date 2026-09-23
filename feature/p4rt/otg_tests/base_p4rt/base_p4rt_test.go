@@ -18,7 +18,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"testing"
+	"time"
 
 	"flag"
 
@@ -31,10 +33,12 @@ import (
 	"github.com/openconfig/featureprofiles/internal/fptest"
 	"github.com/openconfig/featureprofiles/internal/p4rtutils"
 	"github.com/openconfig/ondatra"
+	"github.com/openconfig/ondatra/binding/introspect"
 	"github.com/openconfig/ondatra/gnmi"
 	"github.com/openconfig/ondatra/gnmi/oc"
 	"github.com/openconfig/ygot/ygot"
 	p4_v1 "github.com/p4lang/p4runtime/go/p4/v1"
+	"google.golang.org/grpc"
 	"google.golang.org/protobuf/testing/protocmp"
 )
 
@@ -112,6 +116,64 @@ func configInterfaceDUT(i *oc.Interface, a *attrs.Attributes, dut *ondatra.DUTDe
 	s4a.PrefixLength = ygot.Uint8(ipv4PrefixLen)
 
 	return i
+}
+
+// linecardAncestorName walks the component parent chain from compName until a
+// component of type LINECARD is found, and returns that component's name.
+func linecardAncestorName(t *testing.T, dut *ondatra.DUTDevice, compName string) string {
+	t.Helper()
+	cur := compName
+	const maxHops = 16
+	for i := 0; i < maxHops; i++ {
+		ct, ok := gnmi.Lookup(t, dut, gnmi.OC().Component(cur).Type().State()).Val()
+		if !ok {
+			return ""
+		}
+		if ct == oc.PlatformTypes_OPENCONFIG_HARDWARE_COMPONENT_LINECARD {
+			return cur
+		}
+		parent, ok := gnmi.Lookup(t, dut, gnmi.OC().Component(cur).Parent().State()).Val()
+		if !ok || parent == "" {
+			return ""
+		}
+		cur = parent
+	}
+	return ""
+}
+
+// ensureNokiaParentLinecardsConfigured provisions minimal OpenConfig for each
+// distinct linecard that parents a P4RT integrated circuit. Nokia SR Linux
+// rejects integrated-circuit config unless the parent linecard exists in the
+// candidate config (e.g. component Linecard1 { config { name Linecard1 } }).
+func ensureNokiaParentLinecardsConfigured(t *testing.T, dut *ondatra.DUTDevice, icNames []string) {
+	t.Helper()
+	if dut.Vendor() != ondatra.NOKIA {
+		return
+	}
+	seen := map[string]bool{}
+	for _, ic := range icNames {
+		lc := linecardAncestorName(t, dut, ic)
+		if lc == "" {
+			t.Fatalf("Could not resolve linecard parent for integrated circuit %q", ic)
+		}
+		if seen[lc] {
+			continue
+		}
+		seen[lc] = true
+		t.Logf("Configuring parent linecard %q before P4RT node-id on IC(s)", lc)
+		gnmi.Update(t, dut, gnmi.OC().Component(lc).Name().Config(), lc)
+	}
+}
+
+// p4rtICNamesSorted returns sorted integrated-circuit component names from the
+// nodes map (IC name -> ondatra port id).
+func p4rtICNamesSorted(nodes map[string]string) []string {
+	keys := make([]string, 0, len(nodes))
+	for k := range nodes {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 // configureDeviceIDs configures p4rt device-id on the DUT.
@@ -210,7 +272,9 @@ func setupP4RTClient(ctx context.Context, args *testArgs) error {
 	clients := []*p4rt_client.P4RTClient{args.client1, args.client2}
 	for index, client := range clients {
 		if client != nil {
-			client.StreamChannelCreate(&streamlist[index])
+			if err := client.StreamChannelCreate(&streamlist[index]); err != nil {
+				return fmt.Errorf("StreamChannelCreate(%q): %w", streamlist[index].Name, err)
+			}
 			if err := client.StreamChannelSendMsg(&streamlist[index].Name, &p4_v1.StreamMessageRequest{
 				Update: &p4_v1.StreamMessageRequest_Arbitration{
 					Arbitration: &p4_v1.MasterArbitrationUpdate{
@@ -295,6 +359,7 @@ func TestP4rtConnect(t *testing.T) {
 
 	// configure DUT with P4RT node-id and ids on different FAPs
 	nodes := findP4RTNodes(t, dut)
+	ensureNokiaParentLinecardsConfigured(t, dut, p4rtICNamesSorted(nodes))
 	configureDeviceIDs(t, dut, nodes)
 
 	var ports []string
@@ -306,14 +371,26 @@ func TestP4rtConnect(t *testing.T) {
 	top := configureATE(t, ate, ports)
 	ate.OTG().PushConfig(t, top)
 
+	// Single gRPC connection for both logical P4RT clients (same DUT endpoint).
+	// WithBlock: wait until TCP+TLS are ready so failures surface here, not on first StreamChannel.
+	// The dial target must be reachable from this host (same L3 path as gNMI if KNE maps both).
+	dialer := introspect.DUTDialer(t, dut, introspect.P4RT)
+	t.Logf("P4RT dial target=%q devicePort=%d", dialer.DialTarget, dialer.DevicePort)
+	dialCtx, cancelDial := context.WithTimeout(ctx, 2*time.Minute)
+	defer cancelDial()
+	rawP4RT, err := dut.RawAPIs().BindingDUT().DialP4RT(dialCtx, grpc.WithBlock())
+	if err != nil {
+		t.Fatalf("DialP4RT to %q (device port %d): %v", dialer.DialTarget, dialer.DevicePort, err)
+	}
+
 	// Setup two different clients for different FAPs
 	client1 := p4rt_client.NewP4RTClient(&p4rt_client.P4RTClientParameters{})
-	if err := client1.P4rtClientSet(dut.RawAPIs().P4RT(t)); err != nil {
+	if err := client1.P4rtClientSet(rawP4RT); err != nil {
 		t.Fatalf("Could not initialize p4rt client: %v", err)
 	}
 
 	client2 := p4rt_client.NewP4RTClient(&p4rt_client.P4RTClientParameters{})
-	if err := client2.P4rtClientSet(dut.RawAPIs().P4RT(t)); err != nil {
+	if err := client2.P4rtClientSet(rawP4RT); err != nil {
 		t.Fatalf("Could not initialize p4rt client: %v", err)
 	}
 

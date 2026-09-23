@@ -221,6 +221,53 @@ func P4RTNodesByPort(t testing.TB, dut *ondatra.DUTDevice) map[string]string {
 	return res
 }
 
+// linecardAncestorName walks the component parent chain from compName until a
+// component of type LINECARD is found, and returns that component's name.
+func linecardAncestorName(t testing.TB, dut *ondatra.DUTDevice, compName string) string {
+	t.Helper()
+	cur := compName
+	const maxHops = 16
+	for i := 0; i < maxHops; i++ {
+		ct, ok := gnmi.Lookup(t, dut, gnmi.OC().Component(cur).Type().State()).Val()
+		if !ok {
+			return ""
+		}
+		if ct == oc.PlatformTypes_OPENCONFIG_HARDWARE_COMPONENT_LINECARD {
+			return cur
+		}
+		parent, ok := gnmi.Lookup(t, dut, gnmi.OC().Component(cur).Parent().State()).Val()
+		if !ok || parent == "" {
+			return ""
+		}
+		cur = parent
+	}
+	return ""
+}
+
+// EnsureNokiaParentLinecardsConfigured provisions minimal OpenConfig for each
+// distinct linecard that parents a P4RT integrated circuit. Nokia SR Linux
+// rejects integrated-circuit config unless the parent linecard exists in the
+// candidate config (e.g. component Linecard1 { config { name Linecard1 } }).
+func EnsureNokiaParentLinecardsConfigured(t testing.TB, dut *ondatra.DUTDevice, icNames []string) {
+	t.Helper()
+	if dut.Vendor() != ondatra.NOKIA {
+		return
+	}
+	seen := map[string]bool{}
+	for _, ic := range icNames {
+		lc := linecardAncestorName(t, dut, ic)
+		if lc == "" {
+			t.Fatalf("Could not resolve linecard parent for integrated circuit %q", ic)
+		}
+		if seen[lc] {
+			continue
+		}
+		seen[lc] = true
+		t.Logf("Configuring parent linecard %q before P4RT node-id on IC(s)", lc)
+		gnmi.Update(t, dut, gnmi.OC().Component(lc).Name().Config(), lc)
+	}
+}
+
 // StreamTermErr returns any error (if present), in the P4RTStreamTermErr channel.
 // Function blocks for 10 seconds if no error in channel.
 func StreamTermErr(ste chan *p4rt_client.P4RTStreamTermErr) error {

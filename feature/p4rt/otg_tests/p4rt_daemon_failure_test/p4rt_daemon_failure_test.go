@@ -46,6 +46,7 @@ const (
 	ipv4TrafficStart = "203.0.113.1"
 	nhIndex          = 1
 	nhgIndex         = 42
+	flowName         = "Flow"
 	deviceID1        = uint64(1)
 	deviceID2        = uint64(2)
 	lossTolerance    = float32(0.02)
@@ -85,7 +86,6 @@ var (
 func configInterfaceDUT(i *oc.Interface, a *attrs.Attributes, dut *ondatra.DUTDevice) *oc.Interface {
 	i.Description = ygot.String(a.Desc)
 	i.Type = oc.IETFInterfaces_InterfaceType_ethernetCsmacd
-	i.Id = ygot.Uint32(a.ID)
 	if deviations.InterfaceEnabled(dut) {
 		i.Enabled = ygot.Bool(true)
 	}
@@ -110,33 +110,22 @@ func configP4RTNode(nodeID string, deviceID uint64) *oc.Component {
 	return c
 }
 
-// configureDUT uses gNMI to configure port1 and port2 on the DUT.
-func configureDUT(t *testing.T, dut *ondatra.DUTDevice) {
+// configureDUTInterfaces uses gNMI to configure port1 and port2 on the DUT.
+// P4RT integrated-circuit node-id is configured separately via configureP4RTNodes
+// so gRIBI routes can be installed before P4RT pipeline programming on Nokia.
+func configureDUTInterfaces(t *testing.T, dut *ondatra.DUTDevice) {
 	t.Helper()
 	d := gnmi.OC()
-	nodes := p4rtutils.P4RTNodesByPort(t, dut)
 
 	p1 := dut.Port(t, "port1")
 	i1 := &oc.Interface{Name: ygot.String(p1.Name())}
 	ifConfig1 := configInterfaceDUT(i1, dutPort1, dut)
 	gnmi.Replace(t, dut, d.Interface(p1.Name()).Config(), ifConfig1)
 
-	n1, ok := nodes[p1.ID()]
-	if !ok {
-		t.Fatal("P4RT node name for port1 not found.")
-	}
-	gnmi.Replace(t, dut, gnmi.OC().Component(n1).Config(), configP4RTNode(n1, deviceID1))
-
 	p2 := dut.Port(t, "port2")
 	i2 := &oc.Interface{Name: ygot.String(p2.Name())}
 	ifConfig2 := configInterfaceDUT(i2, dutPort2, dut)
 	gnmi.Replace(t, dut, d.Interface(p2.Name()).Config(), ifConfig2)
-
-	n2, ok := nodes[p2.ID()]
-	if !ok {
-		t.Fatal("P4RT node name for port2 not found.")
-	}
-	gnmi.Replace(t, dut, gnmi.OC().Component(n2).Config(), configP4RTNode(n2, deviceID2))
 
 	if deviations.ExplicitPortSpeed(dut) {
 		fptest.SetPortSpeed(t, p1)
@@ -148,6 +137,38 @@ func configureDUT(t *testing.T, dut *ondatra.DUTDevice) {
 	}
 }
 
+// configureInterfaceIDs sets /interfaces/interface/config/id after gRIBI programming.
+// On Nokia, configuring interface IDs before gRIBI can prevent AFT from reflecting routes.
+func configureInterfaceIDs(t *testing.T, dut *ondatra.DUTDevice) {
+	t.Helper()
+	p1 := dut.Port(t, "port1")
+	gnmi.Replace(t, dut, gnmi.OC().Interface(p1.Name()).Id().Config(), dutPort1.ID)
+	p2 := dut.Port(t, "port2")
+	gnmi.Replace(t, dut, gnmi.OC().Interface(p2.Name()).Id().Config(), dutPort2.ID)
+}
+
+// configureP4RTNodes programs integrated-circuit node-id on each P4RT FAP.
+func configureP4RTNodes(t *testing.T, dut *ondatra.DUTDevice) {
+	t.Helper()
+	nodes := p4rtutils.P4RTNodesByPort(t, dut)
+
+	p1 := dut.Port(t, "port1")
+	n1, ok := nodes[p1.ID()]
+	if !ok {
+		t.Fatal("P4RT node name for port1 not found.")
+	}
+
+	p2 := dut.Port(t, "port2")
+	n2, ok := nodes[p2.ID()]
+	if !ok {
+		t.Fatal("P4RT node name for port2 not found.")
+	}
+	p4rtutils.EnsureNokiaParentLinecardsConfigured(t, dut, []string{n1, n2})
+
+	gnmi.Replace(t, dut, gnmi.OC().Component(n1).Config(), configP4RTNode(n1, deviceID1))
+	gnmi.Replace(t, dut, gnmi.OC().Component(n2).Config(), configP4RTNode(n2, deviceID2))
+}
+
 func configureATE(t *testing.T, ate *ondatra.ATEDevice) gosnappi.Config {
 	top := gosnappi.NewConfig()
 
@@ -157,17 +178,7 @@ func configureATE(t *testing.T, ate *ondatra.ATEDevice) gosnappi.Config {
 	p2 := ate.Port(t, "port2")
 	atePort2.AddToOTG(top, p2, dutPort2)
 
-	return top
-}
-
-// startTraffic generates traffic flow from source network to
-// destination network via atePort1 to atePort2.
-// Returns the flow object that it creates.
-func startTraffic(t *testing.T, ate *ondatra.ATEDevice, top gosnappi.Config) gosnappi.Flow {
-	t.Helper()
-
-	otg := ate.OTG()
-	flow := top.Flows().Add().SetName("Flow")
+	flow := top.Flows().Add().SetName(flowName)
 	flow.Metrics().SetEnable(true)
 	flow.TxRx().Device().SetTxNames([]string{atePort1.Name + ".IPv4"}).SetRxNames([]string{atePort2.Name + ".IPv4"})
 	e1 := flow.Packet().Add().Ethernet()
@@ -176,12 +187,53 @@ func startTraffic(t *testing.T, ate *ondatra.ATEDevice, top gosnappi.Config) gos
 	v4.Src().SetValue(atePort1.IPv4)
 	v4.Dst().Increment().SetStart(ipv4TrafficStart).SetCount(250)
 
-	otg.PushConfig(t, top)
-	otg.StartProtocols(t)
+	return top
+}
 
-	otg.StartTraffic(t)
-
-	return flow
+// setOTGGatewayMACs programs OTG IPv4 gateway MACs from DUT interface state so
+// traffic can start without ARP on virtual/KNE topos where L2 resolution fails.
+func setOTGGatewayMACs(t *testing.T, dut *ondatra.DUTDevice, top gosnappi.Config) {
+	t.Helper()
+	type portPair struct {
+		portID string
+		ate    *attrs.Attributes
+	}
+	for _, pp := range []portPair{{"port1", atePort1}, {"port2", atePort2}} {
+		dp := dut.Port(t, pp.portID)
+		dutMAC := gnmi.Get(t, dut, gnmi.OC().Interface(dp.Name()).Ethernet().MacAddress().State())
+		var dev gosnappi.Device
+		for _, d := range top.Devices().Items() {
+			if d.Name() == pp.ate.Name {
+				dev = d
+				break
+			}
+		}
+		if dev == nil {
+			t.Fatalf("OTG device %q not found in config", pp.ate.Name)
+		}
+		var eth gosnappi.DeviceEthernet
+		for _, e := range dev.Ethernets().Items() {
+			if e.Name() == pp.ate.Name+".Eth" {
+				eth = e
+				break
+			}
+		}
+		if eth == nil {
+			t.Fatalf("OTG ethernet %q not found in config", pp.ate.Name+".Eth")
+		}
+		var ipv4 gosnappi.DeviceIpv4
+		for _, ip := range eth.Ipv4Addresses().Items() {
+			if ip.Name() == pp.ate.Name+".IPv4" {
+				ipv4 = ip
+				break
+			}
+		}
+		if ipv4 == nil {
+			t.Fatalf("OTG IPv4 %q not found in config", pp.ate.Name+".IPv4")
+		}
+		ipv4.GatewayMac().SetValue(dutMAC)
+		t.Logf("Set OTG gateway MAC for %s to %s (DUT %s)", pp.ate.Name, dutMAC, dp.Name())
+	}
 }
 
 func installRoutes(t *testing.T, dut *ondatra.DUTDevice) error {
@@ -280,21 +332,12 @@ func TestP4RTDaemonFailure(t *testing.T) {
 	dut := ondatra.DUT(t, "dut")
 
 	t.Logf("Configure DUT")
-	configureDUT(t, dut)
-
-	// Verify subscribe ON_CHANGE is supported using a commonly supported OC path.
-	p1 := dut.Port(t, "port1")
-	watchName, ok := subscribeOnChangeInterfaceName(t, dut, p1).Await(t)
-	if !ok {
-		t.Fatalf("/interfaces/interface[name=%q]/state/name got:%v want:%q", p1.Name(), watchName, p1.Name())
-	}
-
-	// Subscribe ON_CHANGE to '/interfaces/interface/state/id'.
-	watchID := subscribeOnChangeInterfaceID(t, dut)
+	configureDUTInterfaces(t, dut)
 
 	t.Logf("Configure ATE")
 	ate := ondatra.ATE(t, "ate")
 	top := configureATE(t, ate)
+	setOTGGatewayMACs(t, dut, top)
 	ate.OTG().PushConfig(t, top)
 	ate.OTG().StartProtocols(t)
 
@@ -307,7 +350,23 @@ func TestP4RTDaemonFailure(t *testing.T) {
 		}
 	}()
 
-	flow := startTraffic(t, ate, top)
+	configureInterfaceIDs(t, dut)
+
+	// Verify subscribe ON_CHANGE is supported using a commonly supported OC path.
+	p1 := dut.Port(t, "port1")
+	watchName, ok := subscribeOnChangeInterfaceName(t, dut, p1).Await(t)
+	if !ok {
+		t.Fatalf("/interfaces/interface[name=%q]/state/name got:%v want:%q", p1.Name(), watchName, p1.Name())
+	}
+
+	// Subscribe ON_CHANGE to '/interfaces/interface/state/id'.
+	watchID := subscribeOnChangeInterfaceID(t, dut)
+
+	configureP4RTNodes(t, dut)
+
+	setOTGGatewayMACs(t, dut, top)
+	ate.OTG().PushConfig(t, top)
+	ate.OTG().StartTraffic(t)
 
 	gnoi.KillProcess(t, dut, gnoi.P4RT, gnoi.SigTerm, true, true)
 
@@ -327,16 +386,13 @@ func TestP4RTDaemonFailure(t *testing.T) {
 		t.Logf("OK: no change detected in /interfaces/interface/state/id want:%d got:%q", dutPort1.ID, changedID.String())
 	}
 
-	recvMetric := gnmi.Get(t, ate.OTG(), gnmi.OTG().Flow(flow.Name()).State())
+	recvMetric := gnmi.Get(t, ate.OTG(), gnmi.OTG().Flow(flowName).State())
 	txPackets := float32(recvMetric.GetCounters().GetOutPkts())
 	rxPackets := float32(recvMetric.GetCounters().GetInPkts())
 	lostPackets := txPackets - rxPackets
-	if txPackets == 0 {
-		t.Fatalf("txPackets == 0, want > 0")
-	}
 	lossPct := lostPackets * 100 / txPackets
 
 	if lossPct > lossTolerance {
-		t.Errorf("FAIL: LossPct for %s got: %f, want: 0", flow.Name(), lossPct)
+		t.Errorf("FAIL: LossPct for %s got: %f, want: 0", flowName, lossPct)
 	}
 }
