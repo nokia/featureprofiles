@@ -2,6 +2,7 @@
 package mpls_gre_ipv4_encap_test
 
 import (
+	"sync"
 	"testing"
 	"time"
 
@@ -29,11 +30,15 @@ const (
 	ethernetCsmacd = oc.IETFInterfaces_InterfaceType_ethernetCsmacd
 	ieee8023adLag  = oc.IETFInterfaces_InterfaceType_ieee8023adLag
 	GREProtocol    = 47
+	// Indices into top.Ports() after ConfigureLag order: agg1 members (port1, port2), then agg2 (port3, port4).
+	otgFlowTxPortIndex = 0
+	otgFlowRxPortIndex = 2
 )
 
 var (
-	top          = gosnappi.NewConfig()
-	aggID        string
+	top                  = gosnappi.NewConfig()
+	mplsGreEncapInitOnce sync.Once
+	aggID                string
 	custPorts    = []string{"port1", "port2"}
 	corePorts    = []string{"port3", "port4"}
 	custIntfIPv4 = attrs.Attributes{
@@ -166,8 +171,8 @@ var (
 	}
 	// MPLSOGRE Encap IPv4 interface IPv4 Payload
 	FlowIPv4 = &otgconfighelpers.Flow{
-		TxNames:           []string{agg1.Interfaces[0].Name + ".IPv4"},
-		RxNames:           []string{agg2.Name + ".IPv4"},
+		TxNames:           []string{agg1.Interfaces[0].Name + ".Dev"},
+		RxNames:           []string{agg2.Name + ".Dev"},
 		SizeWeightProfile: &sizeWeightProfile,
 		Flowrate:          80,
 		FlowName:          "GCI traffic IPv4 interface IPv4 Payload",
@@ -182,8 +187,8 @@ var (
 	}
 	// FlowMultiCloudIPv4 IPv4 Flow configuration.
 	FlowMultiCloudIPv4 = &otgconfighelpers.Flow{
-		TxNames:           []string{agg1.Interfaces[3].Name + ".IPv4"},
-		RxNames:           []string{agg2.Name + ".IPv4"},
+		TxNames:           []string{agg1.Interfaces[3].Name + ".Dev"},
+		RxNames:           []string{agg2.Name + ".Dev"},
 		SizeWeightProfile: &sizeWeightProfile,
 		FlowName:          "GCI traffic IPv4 interface IPv4 MultiCloud Payload",
 		EthFlow:           &otgconfighelpers.EthFlowParams{SrcMAC: agg1.AggMAC},
@@ -198,8 +203,8 @@ var (
 	}
 	// MPLSOGRE Encap IPv6 interface IPv6 Payload
 	FlowIPv6 = &otgconfighelpers.Flow{
-		TxNames:   []string{agg1.Interfaces[1].Name + ".IPv6"},
-		RxNames:   []string{agg2.Name + ".IPv6"},
+		TxNames:   []string{agg1.Interfaces[1].Name + ".Dev"},
+		RxNames:   []string{agg2.Name + ".Dev"},
 		FrameSize: 1500,
 		Flowrate:  80,
 		FlowName:  "GCI traffic IPv6 interface IPv6 Payload",
@@ -214,8 +219,8 @@ var (
 	}
 	// MPLSOGRE Encap IPv4+IPv6 Interface IPv4 Payload
 	FlowDualIPv4 = &otgconfighelpers.Flow{
-		TxNames:   []string{agg1.Interfaces[2].Name + ".IPv4"},
-		RxNames:   []string{agg2.Name + ".IPv4"},
+		TxNames:   []string{agg1.Interfaces[2].Name + ".Dev"},
+		RxNames:   []string{agg2.Name + ".Dev"},
 		FrameSize: 1500,
 		FlowName:  "GCI traffic IPv4+IPv6 interface IPv4 Payload",
 		EthFlow:   &otgconfighelpers.EthFlowParams{SrcMAC: agg1.AggMAC},
@@ -230,8 +235,8 @@ var (
 
 	// MPLSOGRE Encap IPv4+IPv6 Interface IPv6 Payload
 	FlowDualIPv6 = &otgconfighelpers.Flow{
-		TxNames:   []string{agg1.Interfaces[2].Name + ".IPv6"},
-		RxNames:   []string{agg2.Name + ".IPv6"},
+		TxNames:   []string{agg1.Interfaces[2].Name + ".Dev"},
+		RxNames:   []string{agg2.Name + ".Dev"},
 		FrameSize: 1500,
 		FlowName:  "GCI traffic IPv4+IPv6 interface IPv6 Payload",
 		EthFlow:   &otgconfighelpers.EthFlowParams{SrcMAC: agg1.AggMAC},
@@ -245,8 +250,8 @@ var (
 	}
 	// MPLSOGRE Encap IPv4 Interface BGPv4 Payload
 	flowBGPv4 = &otgconfighelpers.Flow{
-		TxNames:   []string{agg1.Interfaces[0].Name + ".IPv4"},
-		RxNames:   []string{agg2.Name + ".IPv4"},
+		TxNames:   []string{agg1.Interfaces[0].Name + ".Dev"},
+		RxNames:   []string{agg2.Name + ".Dev"},
 		FrameSize: 1500,
 		FlowName:  "GCI traffic IPv4 interface, BGPv4 Payload",
 		EthFlow:   &otgconfighelpers.EthFlowParams{SrcMAC: agg1.AggMAC},
@@ -262,8 +267,8 @@ var (
 
 	// MPLSOGRE Encap IPv4 Interface BFDv4 Payload
 	flowBFDv4 = &otgconfighelpers.Flow{
-		TxNames:   []string{agg1.Interfaces[0].Name + ".IPv4"},
-		RxNames:   []string{agg2.Name + ".IPv4"},
+		TxNames:   []string{agg1.Interfaces[0].Name + ".Dev"},
+		RxNames:   []string{agg2.Name + ".Dev"},
 		FrameSize: 1500,
 		FlowName:  "GCI traffic IPv4 interface, BFDv4 Payload",
 		EthFlow:   &otgconfighelpers.EthFlowParams{SrcMAC: agg1.AggMAC},
@@ -328,6 +333,21 @@ func ConfigureOTG(t *testing.T) {
 	ate.OTG().PushConfig(t, top)
 }
 
+// ensureMPLSOGREEncapTestSetup configures DUT and OTG once. Traffic tests may run without
+// TestInitMPLSOGREEncap (e.g. go test -run TestMPLSOGREEncapIPv4); without DUT addresses the
+// OTG cannot resolve the gateway MAC and StartTraffic fails.
+func ensureMPLSOGREEncapTestSetup(t *testing.T) {
+	t.Helper()
+	mplsGreEncapInitOnce.Do(func() {
+		dut := ondatra.DUT(t, "dut")
+		fptest.ConfigureDefaultNetworkInstance(t, dut)
+		ocPFParams := GetDefaultOcPolicyForwardingParams()
+		ocNHGParams := GetDefaultStaticNextHopGroupParams()
+		ConfigureDut(t, dut, ocPFParams, ocNHGParams)
+		ConfigureOTG(t)
+	})
+}
+
 // PF-1.14.1: Generate DUT Configuration
 // Modified to create and pass OC root, ni, pf
 func ConfigureDut(t *testing.T, dut *ondatra.DUTDevice, ocPFParams cfgplugins.OcPolicyForwardingParams, ocNHGParams cfgplugins.StaticNextHopGroupParams) {
@@ -346,28 +366,29 @@ func ConfigureDut(t *testing.T, dut *ondatra.DUTDevice, ocPFParams cfgplugins.Oc
 
 }
 
-func TestSetup(t *testing.T) {
+// TestInitMPLSOGREEncap documents PF-1.14.1 and runs the same one-time setup as traffic tests.
+// With default lexicographic ordering it runs before TestMPLSOGREEncap*; traffic helpers also call
+// ensureMPLSOGREEncapTestSetup so a filtered run (e.g. -run TestMPLSOGREEncapIPv4) still configures the DUT.
+func TestInitMPLSOGREEncap(t *testing.T) {
 	t.Log("PF-1.14.1: Generate DUT Configuration")
-	dut := ondatra.DUT(t, "dut")
-	fptest.ConfigureDefaultNetworkInstance(t, dut)
-
-	// Get default parameters for OC Policy Forwarding
-	ocPFParams := GetDefaultOcPolicyForwardingParams()
-	ocNHGParams := GetDefaultStaticNextHopGroupParams()
-
-	// Pass ocPFParams to ConfigureDut
-	ConfigureDut(t, dut, ocPFParams, ocNHGParams)
-	ConfigureOTG(t)
+	ensureMPLSOGREEncapTestSetup(t)
 }
 
 // GetDefaultStaticNextHopGroupParams provides default parameters for the generator.
 // matching the values in the provided JSON example.
 func GetDefaultStaticNextHopGroupParams() cfgplugins.StaticNextHopGroupParams {
+	// Addresses align with this package's core LAG (DUT 194.0.2.1, ATE 194.0.2.2) and
+	// OuterGREIPLayerIPv4 (GRE dest 10.99.1.1). Arista CLI reference uses the same GRE
+	// destination and ttl 64; tos 96 corresponds to DSCP 24 in the 6-bit field.
 	return cfgplugins.StaticNextHopGroupParams{
-
-		StaticNHGName: "MPLS_in_GRE_Encap",
-		NHIPAddr1:     "nh_ip_addr_1",
-		NHIPAddr2:     "nh_ip_addr_2",
+		StaticNHGName:    "MPLS_in_GRE_Encap",
+		NHIPAddr1:      "194.0.2.2",
+		NHIPAddr2:      "194.0.2.2",
+		OuterIpv4DstDef:  "10.99.1.1",
+		OuterIpv4Src1Def: "194.0.2.1",
+		OuterIpv4Src2Def: "194.0.2.1",
+		OuterDscpDef:     24,
+		OuterTTLDef:      64,
 		// TODO: b/417988636 - Set the MplsLabel to the correct value.
 	}
 }
@@ -379,6 +400,9 @@ func GetDefaultOcPolicyForwardingParams() cfgplugins.OcPolicyForwardingParams {
 		NetworkInstanceName: "DEFAULT",
 		InterfaceID:         "Agg1.10",
 		AppliedPolicyName:   "customer1",
+		// Inner destinations used by RulesAndActions (must be valid prefixes; SRL rejects "").
+		InnerDstIPv4: InnerIPLayerIPv4.DstIP + "/32",
+		InnerDstIPv6: InnerIPLayerIPv6.DstIP + "/128",
 	}
 }
 
@@ -551,6 +575,7 @@ func OTGPreValidation(t *testing.T, params *otgvalidationhelpers.OTGValidation, 
 }
 
 func sendTraffic(t *testing.T, ate *ondatra.ATEDevice) {
+	ensureMPLSOGREEncapTestSetup(t)
 	ate.OTG().PushConfig(t, top)
 	ate.OTG().StartProtocols(t)
 	ate.OTG().StartTraffic(t)
@@ -559,9 +584,12 @@ func sendTraffic(t *testing.T, ate *ondatra.ATEDevice) {
 }
 
 func createflow(t *testing.T, top gosnappi.Config, params *otgconfighelpers.Flow, clearFlows bool) {
+	t.Helper()
+	ensureMPLSOGREEncapTestSetup(t)
 	if clearFlows {
 		top.Flows().Clear()
 	}
+	params.UseLagMemberPorts(t, top, otgFlowTxPortIndex, otgFlowRxPortIndex)
 	params.CreateFlow(top)
 	params.AddEthHeader()
 	params.AddVLANHeader()
@@ -622,19 +650,26 @@ func configDUTInterface(i *oc.Interface, subinterfaces []*attrs.Attributes, dut 
 		if deviations.InterfaceEnabled(dut) {
 			i.Enabled = ygot.Bool(true)
 		}
-		s1 := i.GetOrCreateSubinterface(0)
-		b4 := s1.GetOrCreateIpv4()
-		b6 := s1.GetOrCreateIpv6()
-		b4.Mtu = ygot.Uint16(a.MTU)
-		b6.Mtu = ygot.Uint32(uint32(a.MTU))
-		if deviations.InterfaceEnabled(dut) {
-			b4.Enabled = ygot.Bool(true)
-		}
 		if a.Subinterface != 0 {
 			s := i.GetOrCreateSubinterface(a.Subinterface)
+			b4 := s.GetOrCreateIpv4()
+			b6 := s.GetOrCreateIpv6()
+			b4.Mtu = ygot.Uint16(a.MTU)
+			b6.Mtu = ygot.Uint32(uint32(a.MTU))
+			if deviations.InterfaceEnabled(dut) {
+				b4.Enabled = ygot.Bool(true)
+			}
 			s.GetOrCreateVlan().GetOrCreateMatch().GetOrCreateSingleTagged().SetVlanId(uint16(a.Subinterface))
 			configureInterfaceAddress(dut, s, a)
 		} else {
+			s1 := i.GetOrCreateSubinterface(0)
+			b4 := s1.GetOrCreateIpv4()
+			b6 := s1.GetOrCreateIpv6()
+			b4.Mtu = ygot.Uint16(a.MTU)
+			b6.Mtu = ygot.Uint32(uint32(a.MTU))
+			if deviations.InterfaceEnabled(dut) {
+				b4.Enabled = ygot.Bool(true)
+			}
 			configureInterfaceAddress(dut, s1, a)
 		}
 	}
@@ -681,6 +716,7 @@ func configureStaticRoute(t *testing.T, dut *ondatra.DUTDevice) {
 }
 
 func sendTrafficCapture(t *testing.T, ate *ondatra.ATEDevice) {
+	ensureMPLSOGREEncapTestSetup(t)
 	ate.OTG().PushConfig(t, top)
 	ate.OTG().StartProtocols(t)
 	cs := packetvalidationhelpers.StartCapture(t, ate)

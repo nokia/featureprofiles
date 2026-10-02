@@ -34,3 +34,18 @@ platform_exceptions: {
     weighted_ecmp_fixed_packet_verification: true
   }
 }
+platform_exceptions: {
+  platform: {
+    vendor: NOKIA
+  }
+  deviations: {
+    # SR Linux validates LACP leafrefs to /interfaces/interface before LACP
+    # Replace alone; use a single Update with LAG + members (cfgplugins.SetupAggregateAtomically).
+    aggregate_atomic_update: true
+    interface_enabled: true
+    static_protocol_name: "STATIC"
+    explicit_interface_in_default_vrf: true
+    # OC path uses mpls/global/reserved-label-blocks; SRL schema only exposes mpls/lsps here.
+    label_range_unsupported: true
+  }
+}

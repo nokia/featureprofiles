@@ -376,13 +376,14 @@ func configureATE(t *testing.T, ate *ondatra.ATEDevice) gosnappi.Config {
 	return top
 }
 
-// configureDeviceIDs configures p4rt device-id on the DUT.
+// configureDeviceID configures p4rt device-id on the DUT.
 func configureDeviceID(ctx context.Context, t *testing.T, dut *ondatra.DUTDevice) {
 	nodes := p4rtutils.P4RTNodesByPort(t, dut)
 	p4rtNode, ok := nodes["port1"]
 	if !ok {
 		t.Fatal("Couldn't find P4RT Node for port: port1")
 	}
+	p4rtutils.EnsureNokiaParentLinecardsConfigured(t, dut, []string{p4rtNode})
 	t.Logf("Configuring P4RT Node: %s", p4rtNode)
 	c := oc.Component{}
 	c.Name = ygot.String(p4rtNode)

@@ -2,6 +2,8 @@
 package otgconfighelpers
 
 import (
+	"testing"
+
 	"github.com/open-traffic-generator/snappi/gosnappi"
 )
 
@@ -14,7 +16,11 @@ const (
 
 /*
 Flow is a struct to hold Flow parameters.
-TxNames and RxNames should be set to a valid OTG endpoint name.
+For device mode (default), TxNames and RxNames are emulated stack names, typically
+intf.Name+".IPv4" / ".IPv6" as set by ConfigureInterface on the address objects.
+Some controllers do not resolve LAG-attached emulated devices to hardware ports; for those
+cases call UseLagMemberPorts after LAG ports exist on top and before CreateFlow to use tx_rx.port
+with the same port names as top.Ports() (see ConfigureLag port order).
 Creating basic IPv4 Flow.
 
 	  top = gosnappi.NewConfig()
@@ -167,6 +173,21 @@ func (f *Flow) CreateFlow(top gosnappi.Config) {
 	}
 }
 
+// UseLagMemberPorts selects hardware port tx/rx from top.Ports() by index (order matches
+// ConfigureLag: all members of the first LAG, then all members of the second). Call only after
+// those ports exist on top (e.g. after ConfigureNetworkInterface), not from ate.Port().ID() alone,
+// which can be a logical name that does not match gosnappi port names in the config.
+func (f *Flow) UseLagMemberPorts(t *testing.T, top gosnappi.Config, txPortIndex, rxPortIndex int) {
+	t.Helper()
+	items := top.Ports().Items()
+	if len(items) <= txPortIndex || len(items) <= rxPortIndex {
+		t.Fatalf("OTG top has %d ports; need indices tx=%d rx=%d (add LAG ports to top before flows)", len(items), txPortIndex, rxPortIndex)
+	}
+	f.IsTxRxPort = true
+	f.TxPort = items[txPortIndex].Name()
+	f.RxPorts = []string{items[rxPortIndex].Name()}
+}
+
 // AddEthHeader adds an Ethernet header to the flow.
 func (f *Flow) AddEthHeader() {
 	eth := f.flow.Packet().Add().Ethernet()
@@ -181,6 +202,8 @@ func (f *Flow) AddEthHeader() {
 		} else {
 			eth.Dst().SetValue(f.EthFlow.DstMAC)
 		}
+	} else if f.IsTxRxPort {
+		eth.Dst().Auto()
 	}
 }
 

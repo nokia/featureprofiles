@@ -209,7 +209,7 @@ func NextHopGroupConfig(t *testing.T, dut *ondatra.DUTDevice, traffictype string
 			t.Logf("Unsupported vendor %s for native command support for deviation 'next-hop-group config'", dut.Vendor())
 		}
 	} else {
-		configureNextHopGroups(t, ni, params)
+		configureNextHopGroups(t, dut, ni, params)
 	}
 }
 
@@ -332,7 +332,7 @@ type NexthopGroupUDPParams struct {
 }
 
 // configureNextHopGroups configures the next-hop groups and their encapsulation headers.
-func configureNextHopGroups(t *testing.T, ni *oc.NetworkInstance, params StaticNextHopGroupParams) {
+func configureNextHopGroups(t *testing.T, dut *ondatra.DUTDevice, ni *oc.NetworkInstance, params StaticNextHopGroupParams) {
 	t.Helper()
 	nhg := ni.GetOrCreateStatic().GetOrCreateNextHopGroup("MPLS_in_GRE_Encap")
 	nhg.GetOrCreateNextHop("Dest A-NH1").Index = ygot.String("Dest A-NH1")
@@ -344,7 +344,10 @@ func configureNextHopGroups(t *testing.T, ni *oc.NetworkInstance, params StaticN
 	ueh1 := ni.GetOrCreateStatic().GetOrCreateNextHop("Dest A-NH1").GetOrCreateEncapHeader(1)
 	ueh1.GetOrCreateUdpV4().DstIp = ygot.String(params.OuterIpv4DstDef)
 	ueh1.GetOrCreateUdpV4().SrcIp = ygot.String(params.OuterIpv4Src1Def)
-	ueh1.GetOrCreateUdpV4().Dscp = ygot.Uint8(params.OuterDscpDef)
+	// Nokia SR Linux OC has no dscp leaf under encap-header/udp-v4/config (only src-ip, dst-ip, dst-udp-port, ip-ttl).
+	if dut.Vendor() != ondatra.NOKIA {
+		ueh1.GetOrCreateUdpV4().Dscp = ygot.Uint8(params.OuterDscpDef)
+	}
 	ueh1.GetOrCreateUdpV4().IpTtl = ygot.Uint8(params.OuterTTLDef)
 
 	// TODO: b/417988636 -  mpls to equal params.MplsLabel
@@ -354,7 +357,9 @@ func configureNextHopGroups(t *testing.T, ni *oc.NetworkInstance, params StaticN
 	ueh2 := ni.GetOrCreateStatic().GetOrCreateNextHop("Dest A-NH2").GetOrCreateEncapHeader(1)
 	ueh2.GetOrCreateUdpV4().DstIp = ygot.String(params.OuterIpv4DstDef)
 	ueh2.GetOrCreateUdpV4().SrcIp = ygot.String(params.OuterIpv4Src2Def)
-	ueh2.GetOrCreateUdpV4().Dscp = ygot.Uint8(params.OuterDscpDef)
+	if dut.Vendor() != ondatra.NOKIA {
+		ueh2.GetOrCreateUdpV4().Dscp = ygot.Uint8(params.OuterDscpDef)
+	}
 	ueh2.GetOrCreateUdpV4().IpTtl = ygot.Uint8(params.OuterTTLDef)
 
 	// TODO: b/417988636 -  mpls to equal params.MplsLabel
@@ -374,11 +379,9 @@ func NextHopGroupConfigForMulticloud(t *testing.T, dut *ondatra.DUTDevice, traff
 			t.Logf("Unsupported vendor %s for native command support for deviation 'next-hop-group config'", dut.Vendor())
 		}
 	} else {
-		configureNextHopGroups(t, ni, params)
+		configureNextHopGroups(t, dut, ni, params)
 	}
 }
-
-// NextHopGroupConfigForIpOverUdp configures the interface next-hop-group config for ip over udp.
 func NextHopGroupConfigForIpOverUdp(t *testing.T, dut *ondatra.DUTDevice, params NexthopGroupUDPParams) {
 	t.Helper()
 	if deviations.NextHopGroupOCUnsupported(dut) {

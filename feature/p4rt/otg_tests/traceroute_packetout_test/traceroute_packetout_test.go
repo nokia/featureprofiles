@@ -154,6 +154,7 @@ func configureDeviceID(ctx context.Context, t *testing.T, dut *ondatra.DUTDevice
 		t.Fatal("Couldn't find P4RT Node for port: port1")
 	}
 	t.Logf("Configuring P4RT Node: %s", ingressP4RtNode)
+	p4rtutils.EnsureNokiaParentLinecardsConfigured(t, dut, []string{p4rtNode, ingressP4RtNode})
 
 	c := oc.Component{}
 	c.Name = ygot.String(p4rtNode)

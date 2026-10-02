@@ -488,6 +488,11 @@ func QosClassificationConfig(t *testing.T, dut *ondatra.DUTDevice) {
 
 // LabelRangeConfig configures the interface label range.
 func LabelRangeConfig(t *testing.T, dut *ondatra.DUTDevice) {
+	if deviations.LabelRangeOCUnsupported(dut) {
+		// e.g. Nokia SR Linux OC implements mpls/lsps but not mpls/global/reserved-label-blocks.
+		t.Logf("Skipping OpenConfig MPLS reserved label blocks (label_range_unsupported deviation); using device defaults")
+		return
+	}
 	if deviations.MplsLabelClassificationOCUnsupported(dut) {
 		switch dut.Vendor() {
 		case ondatra.ARISTA:
@@ -731,7 +736,7 @@ func RulesAndActions(params OcPolicyForwardingParams, pf *oc.NetworkInstance_Pol
 
 	// Rule 1: (derived from JSON "customer1_prefixv6_and_icmpv6_ns")
 	rule1 := pols.GetOrCreateRule(ruleSeq)
-	rule1.GetOrCreateIpv4().DestinationAddress = ygot.String(params.InnerDstIPv6)
+	rule1.GetOrCreateIpv6().DestinationAddress = ygot.String(params.InnerDstIPv6)
 	rule1.GetOrCreateIpv6().GetOrCreateIcmpv6().Type = oc.Icmpv6Types_TYPE_NEIGHBOR_SOLICITATION
 
 	// TODO: b/417988636 - Set the action to count
@@ -740,7 +745,7 @@ func RulesAndActions(params OcPolicyForwardingParams, pf *oc.NetworkInstance_Pol
 
 	// Rule 2: (derived from JSON "customer1_prefixv6_and_icmpv6_na")
 	rule2 := pols.GetOrCreateRule(ruleSeq)
-	rule2.GetOrCreateIpv4().DestinationAddress = ygot.String(params.InnerDstIPv6)
+	rule2.GetOrCreateIpv6().DestinationAddress = ygot.String(params.InnerDstIPv6)
 	rule2.GetOrCreateIpv6().GetOrCreateIcmpv6().Type = oc.Icmpv6Types_TYPE_NEIGHBOR_ADVERTISEMENT
 
 	// TODO: b/417988636 - Set the action to count

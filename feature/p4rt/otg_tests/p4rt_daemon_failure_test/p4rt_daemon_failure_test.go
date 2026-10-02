@@ -25,6 +25,7 @@ import (
 	"github.com/openconfig/featureprofiles/internal/fptest"
 	"github.com/openconfig/featureprofiles/internal/gnoi"
 	"github.com/openconfig/featureprofiles/internal/gribi"
+	"github.com/openconfig/featureprofiles/internal/otgutils"
 	"github.com/openconfig/featureprofiles/internal/p4rtutils"
 	"github.com/openconfig/gribigo/fluent"
 	"github.com/openconfig/ondatra"
@@ -117,25 +118,28 @@ func configureDUT(t *testing.T, dut *ondatra.DUTDevice) {
 	nodes := p4rtutils.P4RTNodesByPort(t, dut)
 
 	p1 := dut.Port(t, "port1")
-	i1 := &oc.Interface{Name: ygot.String(p1.Name())}
-	ifConfig1 := configInterfaceDUT(i1, dutPort1, dut)
-	gnmi.Replace(t, dut, d.Interface(p1.Name()).Config(), ifConfig1)
-
 	n1, ok := nodes[p1.ID()]
 	if !ok {
 		t.Fatal("P4RT node name for port1 not found.")
 	}
-	gnmi.Replace(t, dut, gnmi.OC().Component(n1).Config(), configP4RTNode(n1, deviceID1))
 
 	p2 := dut.Port(t, "port2")
-	i2 := &oc.Interface{Name: ygot.String(p2.Name())}
-	ifConfig2 := configInterfaceDUT(i2, dutPort2, dut)
-	gnmi.Replace(t, dut, d.Interface(p2.Name()).Config(), ifConfig2)
-
 	n2, ok := nodes[p2.ID()]
 	if !ok {
 		t.Fatal("P4RT node name for port2 not found.")
 	}
+	p4rtutils.EnsureNokiaParentLinecardsConfigured(t, dut, []string{n1, n2})
+
+	i1 := &oc.Interface{Name: ygot.String(p1.Name())}
+	ifConfig1 := configInterfaceDUT(i1, dutPort1, dut)
+	gnmi.Replace(t, dut, d.Interface(p1.Name()).Config(), ifConfig1)
+
+	gnmi.Replace(t, dut, gnmi.OC().Component(n1).Config(), configP4RTNode(n1, deviceID1))
+
+	i2 := &oc.Interface{Name: ygot.String(p2.Name())}
+	ifConfig2 := configInterfaceDUT(i2, dutPort2, dut)
+	gnmi.Replace(t, dut, d.Interface(p2.Name()).Config(), ifConfig2)
+
 	gnmi.Replace(t, dut, gnmi.OC().Component(n2).Config(), configP4RTNode(n2, deviceID2))
 
 	if deviations.ExplicitPortSpeed(dut) {
@@ -178,6 +182,7 @@ func startTraffic(t *testing.T, ate *ondatra.ATEDevice, top gosnappi.Config) gos
 
 	otg.PushConfig(t, top)
 	otg.StartProtocols(t)
+	otgutils.WaitForARP(t, otg, top, "IPv4")
 
 	otg.StartTraffic(t)
 

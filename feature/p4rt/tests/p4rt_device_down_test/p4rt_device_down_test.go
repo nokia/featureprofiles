@@ -373,6 +373,7 @@ func TestP4rtConnect(t *testing.T) {
 
 	lc2ComponentName = cfgplugins.FindLineCardParent(t, dut, p4rtNode2Name)
 
+	p4rtutils.EnsureNokiaParentLinecardsConfigured(t, dut, []string{p4rtNode1Name, p4rtNode2Name})
 	configureDeviceIDs(t, dut, portToNodeMap)
 
 	configureDUT(t, dut, dutPort1Name, dutPort2Name)

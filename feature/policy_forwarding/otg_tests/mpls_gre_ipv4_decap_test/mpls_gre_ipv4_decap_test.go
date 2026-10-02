@@ -262,7 +262,10 @@ func ConfigureDut(t *testing.T, dut *ondatra.DUTDevice, ocPFParams cfgplugins.Oc
 
 }
 
-func TestSetup(t *testing.T) {
+// TestInitMPLSOGREDecap must run before other tests in this package: Go runs tests in
+// lexicographic order, so a name like TestSetup would run after TestMPLSOGREDecap*
+// and PushConfig would fail with "device endpoint is not configured".
+func TestInitMPLSOGREDecap(t *testing.T) {
 	t.Log("PF-1.12.1: Generate DUT Configuration")
 	dut := ondatra.DUT(t, "dut")
 	fptest.ConfigureDefaultNetworkInstance(t, dut)
@@ -470,19 +473,26 @@ func configDUTInterface(i *oc.Interface, subinterfaces []*attrs.Attributes, dut 
 		if deviations.InterfaceEnabled(dut) {
 			i.Enabled = ygot.Bool(true)
 		}
-		s1 := i.GetOrCreateSubinterface(0)
-		b4 := s1.GetOrCreateIpv4()
-		b6 := s1.GetOrCreateIpv6()
-		b4.Mtu = ygot.Uint16(a.MTU)
-		b6.Mtu = ygot.Uint32(uint32(a.MTU))
-		if deviations.InterfaceEnabled(dut) {
-			b4.Enabled = ygot.Bool(true)
-		}
 		if a.Subinterface != 0 {
 			s := i.GetOrCreateSubinterface(a.Subinterface)
+			b4 := s.GetOrCreateIpv4()
+			b6 := s.GetOrCreateIpv6()
+			b4.Mtu = ygot.Uint16(a.MTU)
+			b6.Mtu = ygot.Uint32(uint32(a.MTU))
+			if deviations.InterfaceEnabled(dut) {
+				b4.Enabled = ygot.Bool(true)
+			}
 			s.GetOrCreateVlan().GetOrCreateMatch().GetOrCreateSingleTagged().SetVlanId(uint16(a.Subinterface))
 			configureInterfaceAddress(dut, s, a)
 		} else {
+			s1 := i.GetOrCreateSubinterface(0)
+			b4 := s1.GetOrCreateIpv4()
+			b6 := s1.GetOrCreateIpv6()
+			b4.Mtu = ygot.Uint16(a.MTU)
+			b6.Mtu = ygot.Uint32(uint32(a.MTU))
+			if deviations.InterfaceEnabled(dut) {
+				b4.Enabled = ygot.Bool(true)
+			}
 			configureInterfaceAddress(dut, s1, a)
 		}
 	}
