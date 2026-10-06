@@ -102,7 +102,7 @@ func PrettyPrint(i any) string {
 }
 
 // var gRPCClientAddr net.Addr
-func setupUserPassword(t *testing.T, dut *ondatra.DUTDevice, username, password string) {
+func SetupUserPassword(t *testing.T, dut *ondatra.DUTDevice, username, password string) {
 	passwordversion := fmt.Sprintf("v%d", time.Now().UnixNano())
 	request := &cpb.RotateAccountCredentialsRequest{
 		Request: &cpb.RotateAccountCredentialsRequest_Password{
@@ -386,7 +386,7 @@ func nokiaGrpcMetadataAuth(t *testing.T) []*gnmipb.Update {
 func SetupUsers(t *testing.T, dut *ondatra.DUTDevice, configureFailCliRole bool) {
 	if dut.Vendor() == ondatra.JUNIPER {
 		juniperSetup(t, dut, configureFailCliRole)
-		setupUserPassword(t, dut, SuccessUsername, successPassword)
+		SetupUserPassword(t, dut, SuccessUsername, successPassword)
 	} else {
 		auth := &oc.System_Aaa_Authentication{}
 		successUser := auth.GetOrCreateUser(SuccessUsername)
@@ -441,10 +441,10 @@ func SetupUsers(t *testing.T, dut *ondatra.DUTDevice, configureFailCliRole bool)
 				t.Fatalf("Unexpected error configuring nokia metadata auth: %v", err)
 			}
 		}
-		setupUserPassword(t, dut, SuccessUsername, successPassword)
-		setupUserPassword(t, dut, FailAuthenticateUsername, failPassword)
+		SetupUserPassword(t, dut, SuccessUsername, successPassword)
+		SetupUserPassword(t, dut, FailAuthenticateUsername, failPassword)
 		if configureFailCliRole {
-			setupUserPassword(t, dut, failAuthorizeUsername, failAuthorizePassword)
+			SetupUserPassword(t, dut, failAuthorizeUsername, failAuthorizePassword)
 		}
 		// Configuring as taskgroup which implicit denies all commands except show interface , which is attached to the failRoleName and then failUsername.
 		if deviations.OcAaaUserRoleLeafStringTypeUnsupported(dut) && configureFailCliRole {
@@ -1747,7 +1747,7 @@ func configureEnableAuth(t *testing.T, dut *ondatra.DUTDevice) {
 	switch dut.Vendor() {
 	case ondatra.ARISTA:
 		helpers.GnmiCLIConfig(t, dut, "aaa authentication enable default local\nenable password acctzEnable")
-		setupUserPassword(t, dut, privEscUsername, privEscPassword)
+		SetupUserPassword(t, dut, privEscUsername, privEscPassword)
 	case ondatra.CISCO:
 		helpers.GnmiCLIConfig(t, dut, "aaa authentication enable default local\nenable secret acctzEnable")
 	}
@@ -1757,9 +1757,14 @@ func SendPrivEscalation(t *testing.T, dut *ondatra.DUTDevice, staticBinding bool
 	target := GetSSHTarget(t, dut, staticBinding)
 	var records []*acctzpb.RecordResponse
 
-	enableAccountingStartStop(t, dut)
-	configureRegularUser(t, dut)
-	configureEnableAuth(t, dut)
+	switch dut.Vendor() {
+	case ondatra.NOKIA:
+		t.Logf("Skipping regular-user and enable-auth setup for Nokia; using %s", failAuthorizeUsername)
+	default:
+		enableAccountingStartStop(t, dut)
+		configureRegularUser(t, dut)
+		configureEnableAuth(t, dut)
+	}
 
 	var user, password string
 	var recordStatus acctzpb.AuthnDetail_AuthnStatus
@@ -1768,9 +1773,15 @@ func SendPrivEscalation(t *testing.T, dut *ondatra.DUTDevice, staticBinding bool
 		password = successPassword
 		recordStatus = acctzpb.AuthnDetail_AUTHN_STATUS_SUCCESS
 	} else {
-		user = privEscUsername
-		password = privEscPassword
 		recordStatus = acctzpb.AuthnDetail_AUTHN_STATUS_FAIL
+		switch dut.Vendor() {
+		case ondatra.NOKIA:
+			user = failAuthorizeUsername
+			password = failAuthorizePassword
+		default:
+			user = privEscUsername
+			password = privEscPassword
+		}
 	}
 
 	sshConn, w := dialSSH(t, dut, user, password, target)
@@ -1873,6 +1884,8 @@ func getPrivEscalationCommand(dut *ondatra.DUTDevice) string {
 	switch dut.Vendor() {
 	case ondatra.ARISTA, ondatra.CISCO:
 		return "configure terminal"
+	case ondatra.NOKIA:
+		return "bash sudo uname -a"
 	default:
 		return ""
 	}

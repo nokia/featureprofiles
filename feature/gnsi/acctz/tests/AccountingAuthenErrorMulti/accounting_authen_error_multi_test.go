@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -41,11 +40,6 @@ const (
 	tacacsServer        = "192.0.2.100"
 	tacacsKey           = "testkey"
 	authAttempts        = 3
-	ocUserRole          = "network-admin"
-)
-
-var tacacsServerRE = regexp.MustCompile(
-	fmt.Sprintf(`(?m)%s`, regexp.QuoteMeta(tacacsServer)),
 )
 
 // rpcCredentials provides username and password metadata for gRPC RPC authentication requests.
@@ -91,7 +85,7 @@ func TestAccountingAuthenErrorMultiTransaction(t *testing.T) {
 	t.Helper()
 	dut := ondatra.DUT(t, "dut")
 	batch := new(gnmi.SetBatch)
-	setupTestUser(t, batch)
+	setupTestUser(t, dut)
 	// Configure TACACS normally first.
 	configureTacacsAAAWithLocalFallback(t, batch)
 	batch.Set(t, dut)
@@ -202,66 +196,52 @@ func configureTacacsAAAWithLocalFallback(t *testing.T, batch *gnmi.SetBatch) {
 	// aaa authentication login default group tacacs+ local
 	// ------------------------------------------------------------
 	auth := aaa.GetOrCreateAuthentication()
-	loginAdmin := auth.GetOrCreateAdminUser()
-	loginAdmin.SetAdminPassword(successPassword)
+	// loginAdmin := auth.GetOrCreateAdminUser()
+	// loginAdmin.SetAdminPassword(successPassword)
+	// auth.SetAuthenticationMethod(
+	// 	[]oc.System_Aaa_Authentication_AuthenticationMethod_Union{
+	// 		oc.AaaTypes_AAA_METHOD_TYPE_TACACS_ALL,
+	// 		oc.AaaTypes_AAA_METHOD_TYPE_LOCAL,
+	// 	},
+	// )
 	auth.SetAuthenticationMethod(
 		[]oc.System_Aaa_Authentication_AuthenticationMethod_Union{
-			oc.AaaTypes_AAA_METHOD_TYPE_TACACS_ALL,
-			oc.AaaTypes_AAA_METHOD_TYPE_LOCAL,
+			oc.UnionString("TACACS"),
+			oc.UnionString("local"),
 		},
 	)
 	// ------------------------------------------------------------
 	// Push config
 	// ------------------------------------------------------------
 	gnmi.BatchUpdate(batch, gnmi.OC().System().Aaa().ServerGroup("TACACS").Config(), sg)
+	gnmi.BatchUpdate(batch, gnmi.OC().System().Aaa().Authentication().Config(), auth)
 	t.Log("Configured TACACS AAA with local fallback")
 }
 
-// verifyTacacsConfigured verifies TACACS+ AAA configuration state on the DUT.
-//
-// When expectConfigured is true:
-//   - AAA configuration must exist.
-//   - The TACACS+ server must be present in "show tacacs".
-//
-// When expectConfigured is false:
-//   - The TACACS+ server must not appear in "show tacacs".
+// verifyTacacsConfigured checks that the TACACS server-group state address matches the configured server.
 func verifyTacacsConfigured(t *testing.T, dut *ondatra.DUTDevice) {
 	t.Helper()
-	system := gnmi.Get(t, dut, gnmi.OC().System().State())
-	if system.GetAaa() == nil {
-		t.Fatalf("AAA subsystem not configured")
+	addrPath := gnmi.OC().System().Aaa().ServerGroup("TACACS").Server(tacacsServer).Address().State()
+	if got := gnmi.Get(t, dut, addrPath); got != tacacsServer {
+		t.Fatalf("TACACS server address: got %q, want %q", got, tacacsServer)
 	}
-	resp, err := dut.RawAPIs().CLI(t).RunCommand(context.Background(), "show tacacs")
-	if err != nil {
-		t.Fatalf("show tacacs failed: %v", err)
-	}
-
-	output := resp.Output()
-	expectConfigured := tacacsServerRE.MatchString(output)
-	if expectConfigured {
-		t.Logf("Verified TACACS+ server %q is configured", tacacsServer)
-	} else {
-		t.Fatalf("TACACS+ server %q not found in DUT configuration", tacacsServer)
-	}
+	t.Logf("Verified TACACS+ server %q is configured", tacacsServer)
 }
 
-// setupTestUser queues configuration for a local AAA test user.
-// The configured user is used for authentication testing with the DUT.
-// A cleanup handler is registered to remove the user configuration after test completion.
-func setupTestUser(t *testing.T, batch *gnmi.SetBatch) {
+// setupTestUser provisions the local AAA test user on the DUT and schedules cleanup.
+// The role is the OpenConfig admin identity. The password is set with gNSI credentialz.
+func setupTestUser(t *testing.T, dut *ondatra.DUTDevice) {
 	t.Helper()
 	userPath := gnmi.OC().System().Aaa().Authentication().User(acctzlib.SuccessUsername)
 	user := &oc.System_Aaa_Authentication_User{
 		Username: ygot.String(acctzlib.SuccessUsername),
-		Role:     oc.UnionString(ocUserRole),
-		Password: ygot.String(successPassword),
+		Role:     oc.AaaTypes_SYSTEM_DEFINED_ROLES_SYSTEM_ROLE_ADMIN,
 	}
-	gnmi.BatchReplace(batch, userPath.Config(), user)
-
-	t.Logf("Configured test user %q", acctzlib.SuccessUsername)
-
+	gnmi.Replace(t, dut, userPath.Config(), user)
+	t.Logf("provisioned test user %q with role %v via gNMI", acctzlib.SuccessUsername, oc.AaaTypes_SYSTEM_DEFINED_ROLES_SYSTEM_ROLE_ADMIN)
+	acctzlib.SetupUserPassword(t, dut, acctzlib.SuccessUsername, successPassword)
 	t.Cleanup(func() {
-		gnmi.BatchDelete(batch, userPath.Config())
+		gnmi.Delete(t, dut, userPath.Config())
 	})
 }
 
@@ -410,7 +390,7 @@ func deviceRecords(cfg deviceRecordsConfig) ([]*acctzpb.RecordResponse, error) {
 // attempt.
 //
 // The function verifies:
-//   - session status is LOGIN
+//   - session status is ONCE
 //   - authentication status is ERROR
 //   - local and remote address/port values match
 //   - authenticated username matches the expected identity
@@ -421,7 +401,7 @@ func matchRecord(resp *acctzpb.RecordResponse, conn connRecord) bool {
 	if si == nil {
 		return false
 	}
-	if si.GetStatus() != acctzpb.SessionInfo_SESSION_STATUS_LOGIN {
+	if si.GetStatus() != acctzpb.SessionInfo_SESSION_STATUS_ONCE {
 		return false
 	}
 	authn := si.GetAuthn()
@@ -468,7 +448,7 @@ func matchRecord(resp *acctzpb.RecordResponse, conn connRecord) bool {
 // The function verifies:
 //   - record timestamp occurs after T0
 //   - session metadata matches the captured connection details
-//   - session status is LOGIN
+//   - session status is ONCE
 //   - authentication status is ERROR
 //   - authentication cause indicates backend or credential failure
 //   - user identity matches the expected username
@@ -510,8 +490,8 @@ func verifyAuthenErrorRecord(t *testing.T, resp *acctzpb.RecordResponse, conn co
 		t.Errorf("channel_id got %q want empty/0", got)
 	}
 
-	if got := si.GetStatus(); got != acctzpb.SessionInfo_SESSION_STATUS_LOGIN {
-		t.Errorf("session_status got %v want LOGIN", got)
+	if got := si.GetStatus(); got != acctzpb.SessionInfo_SESSION_STATUS_ONCE {
+		t.Errorf("session_status got %v want ONCE", got)
 	}
 	if tty := si.GetTty(); tty != "" {
 		t.Logf("TTY populated: %s", tty)

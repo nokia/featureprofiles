@@ -25,7 +25,9 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
+	"errors"
 	"fmt"
+	"io"
 	"math/big"
 	"net"
 	"strconv"
@@ -33,6 +35,7 @@ import (
 	"time"
 
 	"github.com/openconfig/featureprofiles/internal/fptest"
+	"github.com/openconfig/featureprofiles/internal/helpers"
 	acctzlib "github.com/openconfig/featureprofiles/internal/security/acctz"
 	gnmipb "github.com/openconfig/gnmi/proto/gnmi"
 	gnoipb "github.com/openconfig/gnoi/system"
@@ -58,7 +61,6 @@ const (
 	successPassword     = "verysecurepasswordTest123!"
 	wrongPassword       = "definitelywrongpassword999"
 	unconfiguredUser    = "nonexistent_user_xyz"
-	ocUserRole          = "network-admin"
 	wrongCertCN         = "acctz-test-wrong-client"
 	untrustedCACN       = "acctz-test-untrusted-ca"
 	collectDeadline     = time.Minute
@@ -99,6 +101,7 @@ var (
 // serviceEntry describes one gRPC service under test.
 type serviceEntry struct {
 	name    string
+	dialSvc introspect.Service
 	target  string // host:port resolved from the binding file at runtime
 	svcType acctzpb.GrpcService_GrpcServiceType
 	rpcFn   func(*testing.T, *rpcConfig) error
@@ -203,11 +206,11 @@ func buildServiceTable(t *testing.T, dut *ondatra.DUTDevice) []*serviceEntry {
 	gribiTarget := introspect.DUTDialer(t, dut, introspect.GRIBI).DialTarget
 	p4rtTarget := introspect.DUTDialer(t, dut, introspect.P4RT).DialTarget
 	return []*serviceEntry{
-		{name: "gnmi", target: gnmiTarget, svcType: acctzpb.GrpcService_GRPC_SERVICE_TYPE_GNMI, rpcFn: rpcGNMI},
-		{name: "gnoi", target: gnmiTarget, svcType: acctzpb.GrpcService_GRPC_SERVICE_TYPE_GNOI, rpcFn: rpcGNOI},
-		{name: "gnsi", target: gnmiTarget, svcType: acctzpb.GrpcService_GRPC_SERVICE_TYPE_GNSI, rpcFn: rpcGNSI},
-		{name: "gribi", target: gribiTarget, svcType: acctzpb.GrpcService_GRPC_SERVICE_TYPE_GRIBI, rpcFn: rpcGRIBI},
-		{name: "p4rt", target: p4rtTarget, svcType: acctzpb.GrpcService_GRPC_SERVICE_TYPE_P4RT, rpcFn: rpcP4RT},
+		{name: "gnmi", dialSvc: introspect.GNMI, target: gnmiTarget, svcType: acctzpb.GrpcService_GRPC_SERVICE_TYPE_GNMI, rpcFn: rpcGNMI},
+		{name: "gnoi", dialSvc: introspect.GNOI, target: gnmiTarget, svcType: acctzpb.GrpcService_GRPC_SERVICE_TYPE_GNOI, rpcFn: rpcGNOI},
+		{name: "gnsi", dialSvc: introspect.GNSI, target: gnmiTarget, svcType: acctzpb.GrpcService_GRPC_SERVICE_TYPE_GNSI, rpcFn: rpcGNSI},
+		{name: "gribi", dialSvc: introspect.GRIBI, target: gribiTarget, svcType: acctzpb.GrpcService_GRPC_SERVICE_TYPE_GRIBI, rpcFn: rpcGRIBI},
+		{name: "p4rt", dialSvc: introspect.P4RT, target: p4rtTarget, svcType: acctzpb.GrpcService_GRPC_SERVICE_TYPE_P4RT, rpcFn: rpcP4RT},
 	}
 }
 
@@ -237,7 +240,7 @@ func TestAccountingAuthenFailUni(t *testing.T) {
 	wrongSSHKey := mustGenerateWrongSSHKey(t)
 	mustVerifyServiceConnectivity(t, dut, serviceTable)
 
-	t0 := time.Now().Add(-t0Offset)
+	t0 := helpers.GetRouterTime(t, dut)
 	t.Logf("T0 = %v", t0)
 
 	tests := make([]testCase, 0, len(serviceTable)*len(scenarioTable)+len(cliScenarioTable))
@@ -290,15 +293,9 @@ func TestAccountingAuthenFailUni(t *testing.T) {
 	t.Logf("completed %d per-transaction connection attempts (including %d SSH/CLI attempts)",
 		len(tests), len(tests)-cliIdx)
 
-	acctzUsername, acctzPassword := dutRPCCredentials(dut)
 	acctzTarget := serviceTable[0].target
-	acctzConn, err := grpc.NewClient(
-		acctzTarget,
-		grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{
-			InsecureSkipVerify: true, //nolint:gosec
-		})),
-		grpc.WithPerRPCCredentials(&rpcCredentials{username: acctzUsername, password: acctzPassword}),
-	)
+	acctzDialer := introspect.DUTDialer(t, dut, serviceTable[0].dialSvc)
+	acctzConn, err := grpc.NewClient(acctzTarget, acctzDialer.DialOpts...)
 	if err != nil {
 		t.Fatalf("failed to create acctz gRPC connection to %s: %v", acctzTarget, err)
 	}
@@ -307,9 +304,13 @@ func TestAccountingAuthenFailUni(t *testing.T) {
 	subCtx, subCancel := context.WithTimeout(t.Context(), collectDeadline)
 	defer subCancel()
 
+	requestTimestamp := &timestamppb.Timestamp{
+		Seconds: t0.Unix(),
+		Nanos:   0,
+	}
 	acctzSubClient, err := acctzpb.NewAcctzStreamClient(acctzConn).RecordSubscribe(
 		subCtx,
-		&acctzpb.RecordRequest{Timestamp: timestamppb.New(t0)},
+		&acctzpb.RecordRequest{Timestamp: requestTimestamp},
 	)
 	if err != nil {
 		t.Fatalf("recordSubscribe failed: %v", err)
@@ -320,19 +321,7 @@ func TestAccountingAuthenFailUni(t *testing.T) {
 	}
 	t.Logf("received %d accounting records from DUT", len(gotRecords))
 	for i, r := range gotRecords {
-		si := r.GetSessionInfo()
-		t.Logf("  record[%d]: local=%s:%d remote=%s:%d user=%q channelID=%q "+
-			"sessionStatus=%v authnStatus=%v svcType=%v taskIDs=%v ts=%v",
-			i,
-			si.GetLocalAddress(), si.GetLocalPort(),
-			si.GetRemoteAddress(), si.GetRemotePort(),
-			si.GetUser().GetIdentity(),
-			si.GetChannelId(),
-			si.GetStatus(), si.GetAuthn().GetStatus(),
-			r.GetGrpcService().GetServiceType(),
-			r.GetTaskIds(),
-			r.GetTimestamp().AsTime(),
-		)
+		t.Logf("record[%d]: %s", i, acctzlib.PrettyPrint(r))
 	}
 
 	usedRecord := make([]bool, len(gotRecords))
@@ -433,6 +422,9 @@ func rpcGRIBI(t *testing.T, cfg *rpcConfig) error {
 		return err
 	}
 	_, err = stream.Recv()
+	if errors.Is(err, io.EOF) {
+		return nil
+	}
 	return err
 }
 
@@ -449,12 +441,9 @@ func mustVerifyServiceConnectivity(t *testing.T, dut *ondatra.DUTDevice, service
 	username, password := dutRPCCredentials(dut)
 	for _, svc := range serviceTable {
 		target := svc.target
-		conn, err := grpc.NewClient(
-			target,
-			grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{
-				InsecureSkipVerify: true,
-			})),
-		)
+		// Binding DialOpts carry the client certificate from cert_file when mutual_tls is set.
+		dialer := introspect.DUTDialer(t, dut, svc.dialSvc)
+		conn, err := grpc.NewClient(target, dialer.DialOpts...)
 		if err != nil {
 			t.Fatalf("verifyConnectivity %s: grpc.NewClient: %v", svc.name, err)
 		}
@@ -549,7 +538,11 @@ func matchRecord(cfg *matchRecordConfig) bool {
 	if si == nil {
 		return false
 	}
-	if si.GetStatus() != acctzpb.SessionInfo_SESSION_STATUS_ONCE {
+	wantStatus := acctzpb.SessionInfo_SESSION_STATUS_ONCE
+	if conn.isCLI {
+		wantStatus = acctzpb.SessionInfo_SESSION_STATUS_LOGIN
+	}
+	if si.GetStatus() != wantStatus {
 		return false
 	}
 	if si.GetAuthn().GetStatus() != acctzpb.AuthnDetail_AUTHN_STATUS_FAIL {
@@ -658,8 +651,12 @@ func verifyAuthenFailRecord(cfg *verifyRecordConfig) []error {
 		}
 	}
 
-	if got := si.GetStatus(); got != acctzpb.SessionInfo_SESSION_STATUS_ONCE {
-		add("session_info.status: got %v, want SESSION_STATUS_ONCE", got)
+	wantStatus := acctzpb.SessionInfo_SESSION_STATUS_ONCE
+	if conn.isCLI {
+		wantStatus = acctzpb.SessionInfo_SESSION_STATUS_LOGIN
+	}
+	if got := si.GetStatus(); got != wantStatus {
+		add("session_info.status: got %v, want %v", got, wantStatus)
 	}
 
 	authn := si.GetAuthn()
@@ -775,11 +772,11 @@ func setupTestUser(t *testing.T, dut *ondatra.DUTDevice) {
 	userPath := gnmi.OC().System().Aaa().Authentication().User(acctzlib.SuccessUsername)
 	user := &oc.System_Aaa_Authentication_User{
 		Username: ygot.String(acctzlib.SuccessUsername),
-		Role:     oc.UnionString(ocUserRole),
-		Password: ygot.String(successPassword),
+		Role:     oc.AaaTypes_SYSTEM_DEFINED_ROLES_SYSTEM_ROLE_ADMIN,
 	}
 	gnmi.Replace(t, dut, userPath.Config(), user)
-	t.Logf("provisioned test user %q with role %q via gNMI", acctzlib.SuccessUsername, ocUserRole)
+	t.Logf("provisioned test user %q with role %v via gNMI", acctzlib.SuccessUsername, oc.AaaTypes_SYSTEM_DEFINED_ROLES_SYSTEM_ROLE_ADMIN)
+	acctzlib.SetupUserPassword(t, dut, acctzlib.SuccessUsername, successPassword)
 	t.Cleanup(func() { cleanupTestUser(t, dut) })
 }
 

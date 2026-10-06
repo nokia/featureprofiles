@@ -262,7 +262,7 @@ func mapRoleToPrivilegeLevel(role string) int {
 		return 15
 	case "operator", "network-operator":
 		return 10
-	case "viewer", "read-only":
+	case "viewer", "read-only", "acctz-fp-test-fail":
 		return 1
 	default:
 		level, err := strconv.Atoi(role)
