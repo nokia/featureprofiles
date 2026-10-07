@@ -196,25 +196,17 @@ func configureTacacsAAAWithLocalFallback(t *testing.T, batch *gnmi.SetBatch) {
 	// aaa authentication login default group tacacs+ local
 	// ------------------------------------------------------------
 	auth := aaa.GetOrCreateAuthentication()
-	// loginAdmin := auth.GetOrCreateAdminUser()
-	// loginAdmin.SetAdminPassword(successPassword)
-	// auth.SetAuthenticationMethod(
-	// 	[]oc.System_Aaa_Authentication_AuthenticationMethod_Union{
-	// 		oc.AaaTypes_AAA_METHOD_TYPE_TACACS_ALL,
-	// 		oc.AaaTypes_AAA_METHOD_TYPE_LOCAL,
-	// 	},
-	// )
 	auth.SetAuthenticationMethod(
 		[]oc.System_Aaa_Authentication_AuthenticationMethod_Union{
-			oc.UnionString("TACACS"),
-			oc.UnionString("local"),
+			oc.AaaTypes_AAA_METHOD_TYPE_TACACS_ALL,
+			oc.AaaTypes_AAA_METHOD_TYPE_LOCAL,
 		},
 	)
 	// ------------------------------------------------------------
 	// Push config
 	// ------------------------------------------------------------
 	gnmi.BatchUpdate(batch, gnmi.OC().System().Aaa().ServerGroup("TACACS").Config(), sg)
-	gnmi.BatchUpdate(batch, gnmi.OC().System().Aaa().Authentication().Config(), auth)
+	gnmi.BatchReplace(batch, gnmi.OC().System().Aaa().Authentication().Config(), auth)
 	t.Log("Configured TACACS AAA with local fallback")
 }
 
