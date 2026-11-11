@@ -267,7 +267,7 @@ func TestCommunitySet(t *testing.T) {
 			}
 
 			configureImportBGPPolicy(t, bs.DUT, ipv4, ipv6, tc.communitySetName, tc.communityMatch, tc.matchSetOptions)
-			sleepTime := time.Duration(totalPackets/trafficPps) + 2
+			sleepTime := time.Duration(totalPackets/trafficPps) + 5
 
 			bs.ATETop.Flows().Clear()
 			for index, prefixPairV4 := range prefixesV4 {
@@ -348,7 +348,7 @@ func TestCommunitySetUpdate(t *testing.T) {
 func validateCommunitySetUpdateTraffic(t *testing.T, bs *cfgplugins.BGPSession) {
 	t.Helper()
 
-	sleepTime := time.Duration(totalPackets/trafficPps) + 2
+	sleepTime := time.Duration(totalPackets/trafficPps) + 5
 	bs.ATETop.Flows().Clear()
 	for index, prefixPairV4 := range prefixesV4 {
 		configureFlow(t, bs, prefixPairV4, "ipv4", index)
